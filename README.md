@@ -25,3 +25,11 @@ Use Load color sample to compare touching red/blue solids, green letter holes, a
 This is an initial segmentation experiment, not semantic object recognition or vector tracing. Fine antialiasing and noisy backgrounds can create small components. Original stage 1/2 intensity and mask modules remain as isolated, tested experiments, but are not used by the current UI.
 
 Later stages: refine segmentation based on image tests, trace/simplify contours, set physical dimensions, detect islands and add editable bridges, then export and validate SVGs for Cricut.
+
+## Quantization comparison
+
+Quantized colors is now the default, with 2–16 requested color groups (default 8). These are segmentation groups, not future stencil layers. Show reduced colors toggles the actual palette assignment beneath the same outlines. Seed tolerance retains the previous region grower; Silhouettes is unchanged. The minimum-area setting still filters rather than merges.
+
+Implementation: sRGB is linearized and converted to OKLab. A canonical 32×32×32 RGB histogram stores alpha-weighted mean colors. Fixed-seed, weighted k-means++ initializes centers; weighted Lloyd updates run until converged or 30 iterations. The histogram bounds fitting cost; every visible pixel is subsequently assigned using its own OKLab color. Four-connected labeling splits each palette group into selectable regions. Fully transparent pixels never influence fitting and form a separate inspectable class; partial alpha weights fitting and is preserved in the display. Fewer palette colors may be returned when there are fewer occupied histogram bins. Sorting centers stabilizes palette IDs for identical inputs, but IDs and boundaries may change when settings change.
+
+No smoothing, fragment merging, or resize changes were added to this comparison. Tests include deterministic textured two-color and gradient fixtures, transparency, disconnected regions and color-conversion checks. Real artwork still needs visual evaluation; synthetic tests cannot establish artistic quality.

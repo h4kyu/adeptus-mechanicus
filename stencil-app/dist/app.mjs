@@ -1,17 +1,20 @@
 const $ = id => document.getElementById(id);
 const canvas = $('canvas'), context = canvas.getContext('2d');
-let source, base, result, worker, timer, revision = 0, uploadRevision = 0;
+let source, base, quantizedBase, result, worker, timer, revision = 0, uploadRevision = 0;
 let hover = -1, selected = -1, picking = false, drawQueued = false;
 
 function syncControls() {
+  const quant = $('mode').value === 'quantized';
+  $('quantized-settings').hidden = !quant;
+  $('color-count-value').textContent = $('color-count').value;
   const sil = $('mode').value === 'silhouette', alpha = $('background-mode').value === 'alpha';
   $('background-settings').hidden = !sil;
   $('color-settings').hidden = alpha;
-  $('tolerance-settings').hidden = sil && alpha;
+  $('tolerance-settings').hidden = quant || (sil && alpha);
   $('tolerance-label').textContent = sil ? 'Background tolerance' : 'Color tolerance';
   $('tolerance-value').textContent = `${$('tolerance').value}%`;
   $('alpha-value').textContent = `${$('alpha').value}%`;
-  $('mode-help').textContent = sil ? 'Separate foreground silhouettes and background areas; ignore internal foreground colors. Holes remain separate background regions.' : 'Group connected pixels similar to a starting color. Gradients split into areas; increasing tolerance generally produces broader areas.';
+  $('mode-help').textContent = quant ? 'Reduce the image to a palette, then find connected pieces of each color. Fewer colors simplify; more colors preserve distinctions.' : sil ? 'Separate foreground silhouettes and background areas; ignore internal foreground colors. Holes remain separate background regions.' : 'Group connected pixels similar to a starting color. Gradients split into areas; increasing tolerance generally produces broader areas.';
 }
 
 function compute() {
@@ -19,7 +22,7 @@ function compute() {
   if (!source) return;
   clearTimeout(timer); worker?.terminate();
   const current = ++revision;
-  hover = selected = -1; result = null;
+  hover = selected = -1; result = null; quantizedBase = null; $('palette').replaceChildren();
   $('region').replaceChildren(new Option('Computing…','')); $('region').disabled = true;
   $('status').textContent = 'Computing areas…'; draw();
   timer = setTimeout(() => {
@@ -36,15 +39,30 @@ function compute() {
     worker.onmessage = ({data}) => {
       if (data.revision !== revision) return;
       if (data.error) { fail(data.error); return; }
-      result = data; $('error').textContent = '';
-      $('status').textContent = `${data.regions.length.toLocaleString()} areas · ${data.ignoredPixels.toLocaleString()} pixels hidden`;
+      result = data; $('error').textContent = ''; buildPaletteView();
+      $('status').textContent = `${data.regions.length.toLocaleString()} areas · ${data.ignoredPixels.toLocaleString()} pixels in filtered-out regions`;
       $('region').disabled = false; updateList(); draw(); worker.terminate();
     };
     worker.postMessage({revision:current, pixels:source.data, width:source.width, height:source.height,
-      options:{mode:$('mode').value, tolerance:Number($('tolerance').value)/100,
+      options:{mode:$('mode').value, colorCount:Number($('color-count').value), tolerance:Number($('tolerance').value)/100,
         backgroundMode:$('background-mode').value, background:[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)),
         alphaCutoff:Number($('alpha').value)/100, minSize}});
   }, 140);
+}
+
+function buildPaletteView() {
+  if(!result.palette) return;
+  quantizedBase = new Uint8ClampedArray(base);
+  for(let i=0;i<result.colorLabels.length;i++) {
+    const id=result.colorLabels[i];if(id<0)continue;
+    const alpha=source.data[i*4+3]/255;
+    for(let c=0;c<3;c++) quantizedBase[i*4+c]=base[i*4+c]+(result.palette[id][c]-source.data[i*4+c])*alpha;
+  }
+  result.palette.forEach((rgb,i)=>{
+    const item=document.createElement('span'), chip=document.createElement('i');
+    chip.className='swatch';chip.style.background=`rgb(${rgb.join(',')})`;
+    item.append(chip, String(i+1));item.title=`Palette ${i+1}: RGB ${rgb.join(', ')}`;$('palette').append(item);
+  });
 }
 
 function updateList() {
@@ -58,7 +76,7 @@ function updateList() {
 
 function draw() {
   if (!base) return;
-  const output = new ImageData(new Uint8ClampedArray(base), canvas.width, canvas.height);
+  const output = new ImageData(new Uint8ClampedArray(!picking && $('show-palette').checked && quantizedBase ? quantizedBase : base), canvas.width, canvas.height);
   const showEdges = $('outlines').checked;
   if (result && !picking) {
     for (let i=0;i<result.labels.length;i++) {
@@ -125,8 +143,9 @@ $('file').addEventListener('change',async event=>{
   catch {if(request===uploadRevision)$('error').textContent='Could not open this image.';}
   finally {URL.revokeObjectURL(url);}
 });
-for(const id of ['mode','background-mode','background','tolerance','alpha','min-size']) $(id).addEventListener('input',compute);
+for(const id of ['mode','background-mode','background','tolerance','alpha','min-size','color-count']) $(id).addEventListener('input',compute);
 $('outlines').addEventListener('change',draw);
+$('show-palette').addEventListener('change',draw);
 $('demo').addEventListener('click',sample);
 $('region').addEventListener('change',()=>{selected=$('region').value===''?-1:Number($('region').value);hover=-1;draw();});
 $('clear').addEventListener('click',()=>{selected=hover=-1;cancelPick();if(result)updateList();draw();});

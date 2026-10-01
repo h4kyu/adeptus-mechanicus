@@ -19,8 +19,13 @@
 </section>
 <section><h2>Detect areas</h2>
 <label for="mode">Mode</label>
-<select id="mode"><option value="color">Color areas</option><option value="silhouette">Silhouettes</option></select>
+<select id="mode"><option value="quantized">Quantized colors</option><option value="color">Seed tolerance</option><option value="silhouette">Silhouettes</option></select>
 <p id="mode-help" class="muted"></p>
+<div id="quantized-settings"><label class="threshold-label" for="color-count">Color groups <output id="color-count-value">8</output></label>
+<input id="color-count" type="range" min="2" max="16" value="8">
+<p class="muted">Color groups identify shapes; they are not stencil layers. No smoothing or merging yet.</p>
+<label class="check"><input id="show-palette" type="checkbox"> Show reduced colors</label>
+<div id="palette" class="legend" aria-label="Computed palette"></div></div>
 <div id="background-settings" hidden>
 <label for="background-mode">Background definition</label>
 <select id="background-mode"><option value="color">Background color</option><option value="alpha">Transparency</option></select>

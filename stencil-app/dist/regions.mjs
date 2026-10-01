@@ -2,7 +2,7 @@
 // gradient from chaining across its entire color range through tiny local steps.
 export function detectRegions(data, width, height, options = {}) {
   const { mode = 'color', tolerance = 0.15, background = [255,255,255],
-    backgroundMode = 'color', alphaCutoff = 0.1, minSize = 1 } = options;
+    backgroundMode = 'color', alphaCutoff = 0.1, minSize = 1, colorLabels = null } = options;
   const size = width * height;
   const labels = new Int32Array(size).fill(-1);
   const queue = new Int32Array(size);
@@ -27,7 +27,8 @@ export function detectRegions(data, width, height, options = {}) {
     const visit = j => {
       if (labels[j] !== -1) return;
       let match;
-      if (mode === 'silhouette') match = classes[j] === classes[seed];
+      if (mode === 'quantized') match = colorLabels[j] === colorLabels[seed];
+      else if (mode === 'silhouette') match = classes[j] === classes[seed];
       else {
         const q = j*4;
         match = Math.hypot(colors[q]-colors[p], colors[q+1]-colors[p+1],
@@ -43,7 +44,8 @@ export function detectRegions(data, width, height, options = {}) {
       if (y > 0) visit(i-width); if (y+1 < height) visit(i+width);
     }
     if (tail >= minSize) regions.push({rawId, area:tail, bounds:[minX,minY,maxX,maxY],
-      kind: mode === 'silhouette' ? (classes[seed] ? 'Foreground' : 'Background') : 'Color area'});
+      paletteIndex: mode === 'quantized' ? colorLabels[seed] : null,
+      kind: mode === 'quantized' ? (colorLabels[seed] < 0 ? 'Transparent' : `Palette ${colorLabels[seed]+1}`) : mode === 'silhouette' ? (classes[seed] ? 'Foreground' : 'Background') : 'Color area'});
   }
   regions.sort((a,b) => b.area-a.area);
   const remap = new Int32Array(nextLabel).fill(-1);
