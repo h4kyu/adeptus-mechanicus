@@ -1,11 +1,27 @@
 import { detectRegions } from './regions.mjs';
+import { bilateral } from './smooth.mjs';
+import { grayscale } from './grayscale.mjs';
 import { quantize } from './quantize.mjs';
 self.onmessage = ({data: {revision, pixels, width, height, options}}) => {
   try {
-    const quantized = options.mode === 'quantized' ? quantize(pixels, options.colorCount) : null;
-    const result = detectRegions(pixels, width, height, {...options, colorLabels:quantized?.labels});
+    const prepared=options.mode==='quantized' && options.colorSpace==='grayscale' ? grayscale(pixels) : pixels;
+    const smoothed = options.mode === 'quantized' && options.smoothing ? bilateral(prepared,width,height,{radius:options.smoothRadius,strength:options.smoothStrength}) : null;
+    const input = smoothed || prepared;
+    const quantized = options.mode === 'quantized' ? quantize(input, options.colorCount) : null;
+    const result = detectRegions(input, width, height, {...options, colorLabels:quantized?.labels});
+    // Compare two complete pipelines with identical settings, not the same
+    // boundaries drawn over different source images.
+    let baseline = null;
+    if(smoothed) {
+      const originalColors=quantize(prepared,options.colorCount);
+      baseline={...detectRegions(prepared,width,height,{...options,colorLabels:originalColors.labels}),
+        palette:originalColors.palette,colorLabels:originalColors.labels};
+    }
     const transfers = [result.labels.buffer, result.edges.buffer];
+    if(baseline) transfers.push(baseline.labels.buffer,baseline.edges.buffer,baseline.colorLabels.buffer);
+    if(prepared!==pixels)transfers.push(prepared.buffer);
+    if(smoothed) transfers.push(smoothed.buffer);
     if(quantized) transfers.push(quantized.labels.buffer);
-    self.postMessage({revision, ...result, palette:quantized?.palette, colorLabels:quantized?.labels}, transfers);
+    self.postMessage({revision, ...result, baseline, smoothed, prepared:prepared!==pixels?prepared:null, palette:quantized?.palette, colorLabels:quantized?.labels}, transfers);
   } catch (error) { self.postMessage({revision, error: error.message}); }
 };

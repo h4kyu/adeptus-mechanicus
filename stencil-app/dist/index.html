@@ -5,7 +5,7 @@
 <title>Stencil / Region inspector</title>
 <meta name="description" content="Inspect connected color areas and silhouette boundaries before making stencils.">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='5' fill='%23151a22'/%3E%3Cpath d='M8 8h16v16H8z' fill='none' stroke='%23b5ef64' stroke-width='3'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=cached-grayscale-1">
 </head>
 <body>
 <header><h1>STENCIL <span>/ Region inspector</span></h1><span class="stage">Boundary study</span></header>
@@ -21,9 +21,19 @@
 <label for="mode">Mode</label>
 <select id="mode"><option value="quantized">Quantized colors</option><option value="color">Seed tolerance</option><option value="silhouette">Silhouettes</option></select>
 <p id="mode-help" class="muted"></p>
-<div id="quantized-settings"><label class="threshold-label" for="color-count">Color groups <output id="color-count-value">8</output></label>
+<div id="color-space-settings"><label for="color-space">Group by</label><select id="color-space"><option value="color">Color</option><option value="grayscale">Grayscale brightness</option></select></div>
+<div id="smoothing-settings">
+<label class="check"><input id="smoothing" type="checkbox"> Smooth before quantization</label>
+<div id="smoothing-controls" hidden>
+<label class="threshold-label" for="smooth-radius">Radius <output id="radius-value">2 px</output></label>
+<input id="smooth-radius" type="range" min="1" max="5" value="2">
+<label class="threshold-label" for="smooth-strength">Color strength <output id="strength-value">6</output></label>
+<input id="smooth-strength" type="range" min="1" max="20" value="6">
+<p class="muted">Larger radius reaches farther. Higher strength mixes more different colors and can soften subtle edges. Pixels refer to the working image.</p>
+</div></div>
+<div id="quantized-settings"><label class="threshold-label" for="color-count"><span id="group-label">Color groups</span> <output id="color-count-value">8</output></label>
 <input id="color-count" type="range" min="2" max="16" value="8">
-<p class="muted">Color groups identify shapes; they are not stencil layers. No smoothing or merging yet.</p>
+<p class="muted">Color groups identify shapes; they are not stencil layers. Small regions are not merged.</p>
 <label class="check"><input id="show-palette" type="checkbox"> Show reduced colors</label>
 <div id="palette" class="legend" aria-label="Computed palette"></div></div>
 <div id="background-settings" hidden>
@@ -40,6 +50,11 @@
 <input id="min-size" type="number" min="1" max="1000000" step="1" value="20">
 <p class="muted">Smaller regions are hidden, not merged. Set to 1 to inspect every area.</p>
 </section>
+<section id="layer-panel" hidden><h2>Color layers</h2>
+<p class="muted">Click a layer to highlight its areas. Uncheck to hide its pixels and boundaries. Counts exclude filtered-out areas.</p>
+<div id="layers"></div>
+<p class="muted">Detection changes reset layer visibility and selection.</p>
+</section>
 <section><h2>Inspect</h2>
 <label class="check"><input id="outlines" type="checkbox" checked> Show all boundaries</label>
 <label for="region">Select an area</label><select id="region"><option value="">None</option></select>
@@ -49,10 +64,19 @@
 </aside>
 <div class="workspace">
 <div class="views"><span id="status" role="status">Loading…</span><span id="dimensions"></span></div>
-<div class="canvas-wrap"><canvas id="canvas" aria-label="Original color image with computed region boundaries"></canvas></div>
+<div class="views"><label for="image-view">Image underneath boundaries</label>
+<select id="image-view"><option value="original">Original</option><option value="smoothed" disabled>Smoothed</option></select></div>
+<label class="check"><input id="compare" type="checkbox"> Compare segmentation before / after smoothing</label>
+<div id="comparison" hidden>
+<label for="inspect-side">Sidebar controls</label><select id="inspect-side"><option value="before">Before smoothing</option><option value="after" selected>After smoothing</option></select>
+<div class="comparison-controls"><label class="check"><input id="compare-boundaries" type="checkbox" checked> Show boundaries</label><label class="check"><input id="compare-colors" type="checkbox" checked> Show quantized colors</label></div>
+<p id="compare-note" class="muted"></p>
+<div class="compare-grid"><figure><figcaption>Original · unquantized</figcaption><div class="compare-pane"><canvas id="source-compare" aria-label="Original unquantized image without boundaries"></canvas></div></figure><figure><figcaption id="original-caption">Before smoothing</figcaption><div class="compare-pane"><canvas id="original-compare" aria-label="Quantization before smoothing with its own boundaries"></canvas></div></figure><figure><figcaption id="smoothed-caption">After smoothing</figcaption><div class="compare-pane"><canvas id="smoothed-compare" aria-label="Quantization after smoothing with its own boundaries"></canvas></div></figure></div>
+</div>
+<div id="single-image" class="canvas-wrap"><canvas id="canvas" aria-label="Original color image with computed region boundaries"></canvas></div>
 <p id="instruction" class="muted">Hover to inspect. Click to pin an area. Escape clears the selection.</p>
 <div id="detail" class="detail">No area selected.</div>
-<p class="muted">Cyan: boundaries · Yellow: hover · Pink: pinned selection</p>
+<p id="boundary-legend" class="muted">Cyan: boundaries · Yellow: hover · Pink: pinned selection</p>
 <p class="stage-note">Region inspection only. No intensity conversion, bridges or SVG export.</p>
 </div>
 </main>
