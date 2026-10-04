@@ -7,3 +7,8 @@ input[type=number]{width:100%;margin-top:8px;padding:10px 12px;font:inherit;back
 .workspace.comparing{position:static}.comparison-controls{display:flex;gap:20px;flex-wrap:wrap}.comparison-controls .check{margin:6px 0}
 
 #original-compare,#smoothed-compare{cursor:crosshair}
+
+/* Zoom expands the page rather than creating nested scrolling windows. */
+.canvas-wrap{height:auto;min-height:0;padding:0;display:block;overflow:visible}
+.canvas-wrap canvas{width:100%;height:auto;max-width:none;max-height:none;object-fit:initial;image-rendering:pixelated}
+.workspace{position:static}

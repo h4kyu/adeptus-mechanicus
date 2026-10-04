@@ -5,7 +5,7 @@
 <title>Stencil / Region inspector</title>
 <meta name="description" content="Inspect connected color areas and silhouette boundaries before making stencils.">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='5' fill='%23151a22'/%3E%3Cpath d='M8 8h16v16H8z' fill='none' stroke='%23b5ef64' stroke-width='3'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="style.css?v=cached-grayscale-1">
+<link rel="stylesheet" href="style.css?v=native-zoom-1">
 </head>
 <body>
 <header><h1>STENCIL <span>/ Region inspector</span></h1><span class="stage">Boundary study</span></header>
@@ -29,13 +29,17 @@
 <input id="smooth-radius" type="range" min="1" max="5" value="2">
 <label class="threshold-label" for="smooth-strength">Color strength <output id="strength-value">6</output></label>
 <input id="smooth-strength" type="range" min="1" max="20" value="6">
-<p class="muted">Larger radius reaches farther. Higher strength mixes more different colors and can soften subtle edges. Pixels refer to the working image.</p>
+<p class="muted">Larger radius reaches farther. Higher strength mixes more different colors and can soften subtle edges. Pixels refer to the original image resolution.</p>
 </div></div>
 <div id="quantized-settings"><label class="threshold-label" for="color-count"><span id="group-label">Color groups</span> <output id="color-count-value">8</output></label>
 <input id="color-count" type="range" min="2" max="16" value="8">
-<p class="muted">Color groups identify shapes; they are not stencil layers. Small regions are not merged.</p>
+<p class="muted">Color groups identify shapes; they are not stencil layers. Enable cleanup below to merge small regions.</p>
 <label class="check"><input id="show-palette" type="checkbox"> Show reduced colors</label>
 <div id="palette" class="legend" aria-label="Computed palette"></div></div>
+<div id="cleanup-settings">
+<label class="check"><input id="cleanup" type="checkbox"> Merge small regions</label>
+<div id="cleanup-controls" hidden><label for="cleanup-size">Merge regions smaller than (image pixels)</label><input id="cleanup-size" type="number" min="1" max="1000000" value="20">
+<p class="muted">Smallest first, into the neighbor sharing the longest border. May remove small details. Transparency is preserved.</p></div></div>
 <div id="background-settings" hidden>
 <label for="background-mode">Background definition</label>
 <select id="background-mode"><option value="color">Background color</option><option value="alpha">Transparency</option></select>
@@ -46,7 +50,7 @@
 </div>
 <div id="tolerance-settings"><label class="threshold-label" for="tolerance"><span id="tolerance-label">Color tolerance</span><output id="tolerance-value">15%</output></label>
 <input id="tolerance" type="range" min="0" max="100" value="15"></div>
-<label for="min-size">Minimum area (working pixels)</label>
+<label for="min-size">Minimum area (image pixels)</label>
 <input id="min-size" type="number" min="1" max="1000000" step="1" value="20">
 <p class="muted">Smaller regions are hidden, not merged. Set to 1 to inspect every area.</p>
 </section>
@@ -64,9 +68,11 @@
 </aside>
 <div class="workspace">
 <div class="views"><span id="status" role="status">Loading…</span><span id="dimensions"></span></div>
+<div class="views"><label for="zoom">Zoom</label><select id="zoom"><option value="fit">Fit columns</option><option value="25">25%</option><option value="50">50%</option><option value="100">100% · actual pixels</option><option value="200">200%</option><option value="400">400%</option></select></div>
+<p id="zoom-help" class="muted">Fit changes display size only; processing uses every original pixel.</p>
 <div class="views"><label for="image-view">Image underneath boundaries</label>
 <select id="image-view"><option value="original">Original</option><option value="smoothed" disabled>Smoothed</option></select></div>
-<label class="check"><input id="compare" type="checkbox"> Compare segmentation before / after smoothing</label>
+<label class="check"><input id="compare" type="checkbox"> <span id="compare-label">Compare segmentation before / after smoothing</span></label>
 <div id="comparison" hidden>
 <label for="inspect-side">Sidebar controls</label><select id="inspect-side"><option value="before">Before smoothing</option><option value="after" selected>After smoothing</option></select>
 <div class="comparison-controls"><label class="check"><input id="compare-boundaries" type="checkbox" checked> Show boundaries</label><label class="check"><input id="compare-colors" type="checkbox" checked> Show quantized colors</label></div>

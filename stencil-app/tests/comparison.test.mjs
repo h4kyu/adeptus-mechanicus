@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {mergeSmallRegions} from '../dist/cleanup.mjs';
 import {grayscale} from '../dist/grayscale.mjs';
 import {bilateral} from '../dist/smooth.mjs';
 import {quantize} from '../dist/quantize.mjs';
@@ -26,5 +27,11 @@ test('worker returns independently computed original boundaries for smoothing co
   assert.deepEqual(message.prepared,gray);
   assert.deepEqual(message.baseline.colorLabels,grayQ.labels);
   assert.deepEqual(message.smoothed,bilateral(gray,width,height,{radius:2,strength:.1}));
+  options.cleanup=true;options.cleanupSize=10;
+  self.onmessage({data:{revision:9,pixels,width,height,options}});
+  assert.equal(message.error,undefined);assert.equal(message.comparison,'cleanup');
+  const beforeCleanup=quantize(message.smoothed,2);
+  assert.deepEqual(message.baseline.colorLabels,beforeCleanup.labels);
+  assert.deepEqual(message.colorLabels,mergeSmallRegions(message.smoothed,width,height,beforeCleanup.labels,10).labels);
  } finally {delete globalThis.self;}
 });

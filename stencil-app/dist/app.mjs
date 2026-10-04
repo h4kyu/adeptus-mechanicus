@@ -33,6 +33,13 @@ function syncControls() {
   $('quantized-settings').hidden = !quant;
   $('color-space-settings').hidden = !quant;
   $('smoothing-settings').hidden = !quant;
+  $('cleanup-settings').hidden = !quant;
+  $('cleanup-controls').hidden = !$('cleanup').checked;
+  const stage=$('cleanup').checked?'cleanup':'smoothing';
+  $('compare-label').textContent=`Compare segmentation before / after ${stage}`;
+  $('original-compare').setAttribute('aria-label',`Segmentation before ${stage} with its own boundaries`);
+  $('smoothed-compare').setAttribute('aria-label',`Segmentation after ${stage} with its own boundaries`);
+  for(const option of $('inspect-side').options)option.textContent=`${option.value==='before'?'Before':'After'} ${stage}`;
   $('compare').disabled = !quant;
   if(!quant)$('compare').checked=false;
   $('smoothing-controls').hidden = !$('smoothing').checked;
@@ -79,7 +86,7 @@ function compute() {
       $('region').disabled = false; updateList(); draw(); worker.terminate();
     };
     worker.postMessage({revision:current, pixels:source.data, width:source.width, height:source.height,
-      options:{colorSpace:$('color-space').value,smoothing:$('smoothing').checked, smoothRadius:Number($('smooth-radius').value), smoothStrength:Number($('smooth-strength').value)/100, mode:$('mode').value, colorCount:Number($('color-count').value), tolerance:Number($('tolerance').value)/100,
+      options:{cleanup:$('cleanup').checked,cleanupSize:Number($('cleanup-size').value),colorSpace:$('color-space').value,smoothing:$('smoothing').checked, smoothRadius:Number($('smooth-radius').value), smoothStrength:Number($('smooth-strength').value)/100, mode:$('mode').value, colorCount:Number($('color-count').value), tolerance:Number($('tolerance').value)/100,
         backgroundMode:$('background-mode').value, background:[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)),
         alphaCutoff:Number($('alpha').value)/100, minSize}});
   }, 140);
@@ -180,15 +187,15 @@ function drawComparison() {
   render($('source-compare'),{pixels:base,width:canvas.width,height:canvas.height});
   const before=result?.baseline || (result && !result.smoothed ? result : null);
   for(const [id,pixels,segmentation,caption,side] of [
-    ['original-compare',preparedBase || base,before,'original-caption','before'],
+    ['original-compare',result?.comparison==='cleanup'?(smoothedBase || preparedBase || base):preparedBase || base,before,'original-caption','before'],
     ['smoothed-compare',smoothedBase || preparedBase || base,result,'smoothed-caption','after']]) {
     const state=stateFor(side);
     render($(id),{pixels,base,source:source.data,segmentation,width:canvas.width,height:canvas.height,
       hidden:state.hiddenLayers,palette:$('compare-colors').checked,edges:$('compare-boundaries').checked,
       hover:hoverSide===side?hover:-1,selected:state.selected,layer:state.selectedLayer});
-    $(caption).textContent=`${side==='before'?'Before smoothing':'After smoothing'} · ${segmentation?segmentation.regions.length.toLocaleString()+' areas':'computing…'}`;
+    $(caption).textContent=`${side==='before'?'Before':'After'} ${result?.comparison || ($('cleanup').checked?'cleanup':'smoothing')} · ${segmentation?segmentation.regions.length.toLocaleString()+' areas':'computing…'}`;
   }
-  $('compare-note').textContent=result ? 'The original is shown unchanged. The two segmentation results use the same color count and minimum area. Click either segmented image to inspect it. Sidebar selection and layer visibility apply to the chosen result; each result keeps its own settings.' : 'Computing both segmentation results…';
+  $('compare-note').textContent=result ? (result.cleanup ? `Cleanup changed ${result.cleanup.changedPixels.toLocaleString()} pixels; smoothing and quantization are held constant. Set Minimum area to 1 to see every fragment. ` : '') + 'The original stays unchanged. Click a result to inspect it; sidebar selection and visibility apply to that result.' : 'Computing both segmentation results…';
 }
 
 function scheduleDraw() { if(!drawQueued) {drawQueued=true; requestAnimationFrame(()=>{drawQueued=false;draw();});} }
@@ -201,10 +208,16 @@ function point(event) {
   return Math.min(canvas.height-1,Math.max(0,Math.floor((event.clientY-rect.top)*canvas.height/rect.height)))*canvas.width+
     Math.min(canvas.width-1,Math.max(0,Math.floor((event.clientX-rect.left)*canvas.width/rect.width)));
 }
+function updateZoom() {
+  const fit=$('zoom').value==='fit', scale=fit?1:Number($('zoom').value)/100;
+  const grid=document.querySelector('.compare-grid'),single=$('single-image');
+  grid.style.width=fit?'':`${3*(canvas.width*scale+2)+24}px`;
+  single.style.width=fit?'':`${canvas.width*scale+2}px`;
+  $('zoom-help').textContent=fit?'Fit changes display size only; processing uses every original pixel.':'100% = one image pixel per CSS pixel. Scroll the page to inspect enlarged images.';
+}
 function setSource(image,name) {
   const w=image.naturalWidth||image.width, h=image.naturalHeight||image.height;
-  const scale=Math.min(1,1000/Math.max(w,h));
-  canvas.width=Math.max(1,Math.round(w*scale)); canvas.height=Math.max(1,Math.round(h*scale));
+  canvas.width=w; canvas.height=h;
   context.clearRect(0,0,canvas.width,canvas.height); context.drawImage(image,0,0,canvas.width,canvas.height);
   source=context.getImageData(0,0,canvas.width,canvas.height);
   base=new Uint8ClampedArray(source.data.length);
@@ -217,8 +230,8 @@ function setSource(image,name) {
   }
   $('background-mode').value=transparent?'alpha':'color'; $('background').value='#ffffff';
   $('filename').textContent=name; $('error').textContent='';
-  $('dimensions').textContent=`${canvas.width} × ${canvas.height} px${scale<1?' · reduced for inspection':''}`;
-  compute();
+  $('dimensions').textContent=`${canvas.width} × ${canvas.height} px · original resolution`;
+  updateZoom();compute();
 }
 function sample() {
   uploadRevision++; $('file').value='';
@@ -240,17 +253,18 @@ $('file').addEventListener('change',async event=>{
   catch {if(request===uploadRevision)$('error').textContent='Could not open this image.';}
   finally {URL.revokeObjectURL(url);}
 });
-for(const id of ['color-space','mode','background-mode','background','tolerance','alpha','min-size','color-count','smoothing','smooth-radius','smooth-strength']) $(id).addEventListener('input',compute);
+for(const id of ['cleanup','cleanup-size','color-space','mode','background-mode','background','tolerance','alpha','min-size','color-count','smoothing','smooth-radius','smooth-strength']) $(id).addEventListener('input',compute);
 $('outlines').addEventListener('change',()=>{$('compare-boundaries').checked=$('outlines').checked;draw();});
 $('show-palette').addEventListener('change',()=>{syncImageView();draw();});
 $('image-view').addEventListener('change',draw);
 $('compare').addEventListener('change',()=>{
-  if($('compare').checked && !$('smoothing').checked){$('smoothing').checked=true;compute();}
+  if($('compare').checked && !$('smoothing').checked && !$('cleanup').checked){$('smoothing').checked=true;compute();}
   else {if(!$('compare').checked)switchInspection('after');draw();}
 });
 $('inspect-side').addEventListener('change',()=>{switchInspection($('inspect-side').value);draw();});
 $('compare-colors').addEventListener('change',drawComparison);
 $('compare-boundaries').addEventListener('change',()=>{$('outlines').checked=$('compare-boundaries').checked;draw();});
+$('zoom').addEventListener('change',updateZoom);
 $('demo').addEventListener('click',sample);
 $('region').addEventListener('change',()=>{selected=$('region').value===''?-1:Number($('region').value);hover=-1;selectedLayer=-1;renderLayers();draw();});
 $('clear').addEventListener('click',()=>{selected=hover=selectedLayer=-1;renderLayers();cancelPick();if(result)updateList();draw();});

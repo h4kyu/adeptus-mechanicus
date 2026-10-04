@@ -55,3 +55,13 @@ Side-by-side now always fits both columns and renders the full image height in n
 Choose **Group by → Grayscale brightness** to remove chroma while retaining OKLab lightness, before smoothing and quantization. Brightness group count uses the same 2–16 control. The comparison keeps the original color image alongside the two grayscale segmentation results. Alpha remains unchanged.
 
 Rendering caches the static images and cropped region highlights. Hover only composites changed views, without rebuilding quantized pixels or rendering the hidden single-image view. Detection or display changes invalidate the relevant cached view.
+
+### Small-region cleanup
+
+Enable **Merge small regions** in quantized color or grayscale mode. The threshold is an exclusive pixel-area cutoff on the resized working image. Cleanup operates on all components before the separate minimum-area visibility filter. It merges the smallest first into the adjacent opaque region with the longest shared four-connected border. Ties use stable initial component IDs (size order, then scan order). Touching components of the destination color coalesce immediately. Transparent regions and isolated opaque pieces are retained.
+
+With cleanup enabled, comparison shows the same quantization before and after merging; smoothing is held constant. Disable cleanup to return to the smoothing comparison. Both views retain selection and layer visibility. Set the minimum-area display filter to 1 to inspect all fragments.
+
+### Original resolution and zoom
+
+Uploads now retain their full decoded pixel dimensions throughout processing; the previous 1,000-pixel reduction is removed. Radius and area thresholds use original image pixels. Fit columns scales only the display. Zoom offers 25%, 50%, 100%, 200%, and 400%; 100% maps one source pixel to one CSS pixel. All comparison panels share the zoom, and enlargement expands the page with ordinary page scrolling. No nested image scroll windows or additional resampling are introduced by zoom. Larger originals require more processing time and memory.
