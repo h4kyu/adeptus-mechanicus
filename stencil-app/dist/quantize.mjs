@@ -30,7 +30,7 @@ export function quantize(data, requested=8) {
   for(let i=0;i<bins.length;i+=4)if(bins[i]){weights.push(bins[i]);points.push(toLab(bins[i+1]/bins[i],bins[i+2]/bins[i],bins[i+3]/bins[i]));}
   const labels=new Int16Array(data.length/4).fill(-1);
   if(!points.length)return {palette:[],labels};
-  const K=Math.min(points.length,Math.max(2,Math.min(16,Math.round(requested)||8)));
+  const K=Math.min(points.length,Math.max(1,Math.min(8,Math.round(requested)||8)));
   let state=0x734ab891;
   const random=()=>{state=(Math.imul(1664525,state)+1013904223)>>>0;return state/4294967296;};
   const choose=values=>{let total=0;for(const v of values)total+=v;let target=random()*total;for(let i=0;i<values.length;i++){target-=values[i];if(target<0)return i;}return values.length-1;};

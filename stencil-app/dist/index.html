@@ -2,44 +2,47 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Stencil / Region inspector</title>
+<title>Stencil Studio</title>
 <meta name="description" content="Inspect connected color areas and silhouette boundaries before making stencils.">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='5' fill='%23151a22'/%3E%3Cpath d='M8 8h16v16H8z' fill='none' stroke='%23b5ef64' stroke-width='3'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="style.css?v=native-zoom-1">
+<link rel="stylesheet" href="style.css?v=compact-4">
 </head>
-<body>
-<header><h1>STENCIL <span>/ Region inspector</span></h1><span class="stage">Boundary study</span></header>
-<main>
-<aside>
-<section><h2>Source</h2>
-<label class="upload" for="file">Choose image<input id="file" type="file" accept="image/png,image/jpeg,image/webp"></label>
-<p class="muted">Processed on this device · PNG, JPG, WebP</p>
-<button id="demo" class="secondary">Load color sample</button>
-<p id="filename"></p><p id="error" role="alert"></p>
-</section>
-<section><h2>Detect areas</h2>
+<body data-stage="assign">
+<header class="app-header"><div class="brand"><span class="brand-mark" aria-hidden="true">◩</span><h1>Stencil <span>studio</span></h1></div>
+<nav class="stage-nav" aria-label="Workspace"><button id="stage-prepare" aria-pressed="false"><span>01</span> Prepare</button><button id="stage-assign" aria-pressed="true"><span>02</span> Assign</button></nav>
+<div class="file-actions"><label class="upload" for="file">Open image<input id="file" type="file" accept="image/png,image/jpeg,image/webp"></label><details class="source-menu"><summary aria-label="Image options">•••</summary><div><button id="demo" class="secondary">Load color sample</button></div></details></div></header>
+<div class="document-bar"><span id="filename"></span><span class="local-note">Local session · not saved</span></div><p id="error" role="alert"></p>
+<div id="canvas-viewport" data-tool="select"><div id="canvas-world"></div></div>
+<div class="tool-island" aria-label="Canvas tools"><button id="tool-select" title="Pick (V)" aria-pressed="true">↖ Pick</button><button id="tool-pan" title="Pan (H), or hold Space on the canvas" aria-pressed="false">✥ Pan</button><span class="tool-divider"></span><button id="toggle-inspector" aria-expanded="false" aria-controls="inspector">◧ Groups</button><button id="toggle-settings" aria-expanded="false" aria-controls="floating-settings">⚙ Settings</button></div>
+<div class="zoom-island"><button id="camera-out" aria-label="Zoom out">−</button><input id="camera-slider" type="range" min="-6.643856" max="5" step="0.01" value="0" aria-label="Canvas zoom"><output id="camera-scale">100%</output><button id="camera-in" aria-label="Zoom in">+</button><button id="camera-fit">Fit</button></div>
+<div id="floating-settings" hidden><div class="island-heading"><h2>Canvas settings</h2><button id="close-settings" aria-label="Close canvas settings">×</button></div><div id="view-settings" class="assign-only"></div><div id="prepare-settings" class="prepare-only"></div></div>
+<main><aside id="inspector" hidden aria-label="Editing tools"><div class="island-heading"><span>TOOLS</span><button id="close-inspector" aria-label="Close tools">×</button></div>
+<section class="prepare-only"><h2>Prepare</h2>
+<p id="edit-lock" hidden>Assignments are protected. Reset them below to change segmentation.</p>
+<button id="reset-assignments" hidden>Reset assignments to edit segmentation</button>
+<fieldset id="detection-controls">
 <label for="mode">Mode</label>
-<select id="mode"><option value="quantized">Quantized colors</option><option value="color">Seed tolerance</option><option value="silhouette">Silhouettes</option></select>
-<p id="mode-help" class="muted"></p>
-<div id="color-space-settings"><label for="color-space">Group by</label><select id="color-space"><option value="color">Color</option><option value="grayscale">Grayscale brightness</option></select></div>
-<div id="smoothing-settings">
-<label class="check"><input id="smoothing" type="checkbox"> Smooth before quantization</label>
+<select id="mode"><option value="quantized">Quantized</option><option value="color">Seed tolerance</option><option value="silhouette">Silhouettes</option></select>
+
+<div id="color-space-settings"><label for="color-space">Group by</label><select id="color-space"><option value="color">Color</option><option value="grayscale" selected>Grayscale brightness</option></select></div>
+<div id="quantized-settings"><label class="threshold-label" for="color-count"><span id="group-label">Color groups</span> <output id="color-count-value">8</output></label>
+<input id="color-count" type="range" min="1" max="8" value="8">
+
+</div>
+<details id="preprocessing-details" class="tool-details"><summary>Smoothing &amp; cleanup</summary><div class="details-content"><div id="smoothing-settings">
+<label class="check"><input id="smoothing" type="checkbox"> Smoothing</label>
 <div id="smoothing-controls" hidden>
 <label class="threshold-label" for="smooth-radius">Radius <output id="radius-value">2 px</output></label>
 <input id="smooth-radius" type="range" min="1" max="5" value="2">
 <label class="threshold-label" for="smooth-strength">Color strength <output id="strength-value">6</output></label>
 <input id="smooth-strength" type="range" min="1" max="20" value="6">
-<p class="muted">Larger radius reaches farther. Higher strength mixes more different colors and can soften subtle edges. Pixels refer to the original image resolution.</p>
+
 </div></div>
-<div id="quantized-settings"><label class="threshold-label" for="color-count"><span id="group-label">Color groups</span> <output id="color-count-value">8</output></label>
-<input id="color-count" type="range" min="2" max="16" value="8">
-<p class="muted">Color groups identify shapes; they are not stencil layers. Enable cleanup below to merge small regions.</p>
-<label class="check"><input id="show-palette" type="checkbox"> Show reduced colors</label>
-<div id="palette" class="legend" aria-label="Computed palette"></div></div>
 <div id="cleanup-settings">
 <label class="check"><input id="cleanup" type="checkbox"> Merge small regions</label>
-<div id="cleanup-controls" hidden><label for="cleanup-size">Merge regions smaller than (image pixels)</label><input id="cleanup-size" type="number" min="1" max="1000000" value="20">
-<p class="muted">Smallest first, into the neighbor sharing the longest border. May remove small details. Transparency is preserved.</p></div></div>
+<div id="cleanup-controls" hidden><label for="cleanup-size">Merge below (pixels)</label><input id="cleanup-size" type="number" min="1" max="1000000" value="20">
+</div></div>
+</div></details>
 <div id="background-settings" hidden>
 <label for="background-mode">Background definition</label>
 <select id="background-mode"><option value="color">Background color</option><option value="alpha">Transparency</option></select>
@@ -50,41 +53,37 @@
 </div>
 <div id="tolerance-settings"><label class="threshold-label" for="tolerance"><span id="tolerance-label">Color tolerance</span><output id="tolerance-value">15%</output></label>
 <input id="tolerance" type="range" min="0" max="100" value="15"></div>
-<label for="min-size">Minimum area (image pixels)</label>
+<label for="min-size">Minimum area (pixels)</label>
 <input id="min-size" type="number" min="1" max="1000000" step="1" value="20">
-<p class="muted">Smaller regions are hidden, not merged. Set to 1 to inspect every area.</p>
-</section>
-<section id="layer-panel" hidden><h2>Color layers</h2>
-<p class="muted">Click a layer to highlight its areas. Uncheck to hide its pixels and boundaries. Counts exclude filtered-out areas.</p>
-<div id="layers"></div>
-<p class="muted">Detection changes reset layer visibility and selection.</p>
-</section>
-<section><h2>Inspect</h2>
-<label class="check"><input id="outlines" type="checkbox" checked> Show all boundaries</label>
-<label for="region">Select an area</label><select id="region"><option value="">None</option></select>
-<p id="region-help" class="muted">You can also hover or click directly on the image.</p>
-<button id="clear" class="secondary">Clear selection</button>
+
+</fieldset><div id="palette-settings"><label class="check"><input id="show-palette" type="checkbox"> Show reduced colors</label>
+<div id="palette" class="legend" aria-label="Computed palette"></div></div></section>
+<section class="assign-only"><h2>Groups</h2><p class="selection-card" id="assign-selection" aria-live="polite">No area selected</p>
+<h3 id="assignment-group-title">Intensity groups</h3><div id="assignment-actions"><div class="bucket-buttons" id="assignment-groups"></div><button data-bucket="-2" class="secondary">Mark unbleached</button></div>
+<div class="selection-footer"><span id="assign-count"></span><button id="assign-clear" class="text-button">Deselect</button></div>
+<div class="assign-secondary"><button id="assign-restore" class="secondary">Restore automatic group</button><button id="unbleach-group" class="secondary">Make group unbleached</button></div>
+
+
 </section>
 </aside>
 <div class="workspace">
-<div class="views"><span id="status" role="status">Loading…</span><span id="dimensions"></span></div>
-<div class="views"><label for="zoom">Zoom</label><select id="zoom"><option value="fit">Fit columns</option><option value="25">25%</option><option value="50">50%</option><option value="100">100% · actual pixels</option><option value="200">200%</option><option value="400">400%</option></select></div>
-<p id="zoom-help" class="muted">Fit changes display size only; processing uses every original pixel.</p>
-<div class="views"><label for="image-view">Image underneath boundaries</label>
-<select id="image-view"><option value="original">Original</option><option value="smoothed" disabled>Smoothed</option></select></div>
-<label class="check"><input id="compare" type="checkbox"> <span id="compare-label">Compare segmentation before / after smoothing</span></label>
-<div id="comparison" hidden>
-<label for="inspect-side">Sidebar controls</label><select id="inspect-side"><option value="before">Before smoothing</option><option value="after" selected>After smoothing</option></select>
-<div class="comparison-controls"><label class="check"><input id="compare-boundaries" type="checkbox" checked> Show boundaries</label><label class="check"><input id="compare-colors" type="checkbox" checked> Show quantized colors</label></div>
-<p id="compare-note" class="muted"></p>
+<div class="canvas-meta"><span id="status" role="status">Loading…</span><span id="dimensions"></span></div>
+<div class="canvas-toolbar"><div class="zoom-control"><label for="zoom">Zoom</label><select id="zoom"><option value="fit">Fit</option><option value="25">25%</option><option value="50">50%</option><option value="100">100% · actual pixels</option><option value="200">200%</option><option value="400">400%</option></select></div><div class="history-tools assign-only"><button id="assign-undo" disabled title="Undo (⌘/Ctrl Z)">↶ Undo</button><button id="assign-redo" disabled title="Redo (⇧ ⌘/Ctrl Z)">↷ Redo</button></div></div>
+
+<div class="prepare-only" id="prepare-view">
+<label class="check"><input id="outlines" type="checkbox" checked> Show boundaries</label>
+<label class="check" id="compare-control"><input id="compare" type="checkbox"> <span id="compare-label">Compare before / after cleanup</span></label>
+<div id="comparison" hidden><label for="inspect-side">Active result</label><select id="inspect-side"><option value="before">Before cleanup</option><option value="after" selected>After cleanup</option></select>
 <div class="compare-grid"><figure><figcaption>Original · unquantized</figcaption><div class="compare-pane"><canvas id="source-compare" aria-label="Original unquantized image without boundaries"></canvas></div></figure><figure><figcaption id="original-caption">Before smoothing</figcaption><div class="compare-pane"><canvas id="original-compare" aria-label="Quantization before smoothing with its own boundaries"></canvas></div></figure><figure><figcaption id="smoothed-caption">After smoothing</figcaption><div class="compare-pane"><canvas id="smoothed-compare" aria-label="Quantization after smoothing with its own boundaries"></canvas></div></figure></div>
 </div>
 <div id="single-image" class="canvas-wrap"><canvas id="canvas" aria-label="Original color image with computed region boundaries"></canvas></div>
-<p id="instruction" class="muted">Hover to inspect. Click to pin an area. Escape clears the selection.</p>
-<div id="detail" class="detail">No area selected.</div>
-<p id="boundary-legend" class="muted">Cyan: boundaries · Yellow: hover · Pink: pinned selection</p>
-<p class="stage-note">Region inspection only. No intensity conversion, bridges or SVG export.</p>
+
+</div>
+<div class="assign-only" id="assign-view"><div class="overlay-tools"><label for="overlay-opacity">Overlay opacity <output id="overlay-value">50%</output></label><input id="overlay-opacity" type="range" min="0" max="100" value="50"><label class="check original-toggle"><input id="show-original" type="checkbox" checked> Show original</label><button id="peek-original">Hold to compare</button></div>
+
+<div id="assign-surface"><canvas id="assign-original" aria-label="Original image"></canvas><canvas id="assign-overlay" aria-hidden="true"></canvas><canvas id="assign-outline" aria-label="Select a region to assign a palette group"></canvas></div></div>
 </div>
 </main>
-<script type="module" src="app.mjs"></script>
+<dialog id="discard-dialog" aria-labelledby="discard-title"><form method="dialog"><h2 id="discard-title">Discard manual assignments?</h2><p>This clears your assignments and undo history. Your original image stays untouched. Project saving is not available yet.</p><div class="edit-actions"><button value="cancel" autofocus>Keep editing</button><button value="discard">Discard assignments</button></div></form></dialog>
+<script type="module" src="app.mjs?v=compact-4"></script>
 </body></html>

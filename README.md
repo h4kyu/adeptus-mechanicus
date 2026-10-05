@@ -1,6 +1,6 @@
 # Stencil region inspector
 
-Current stage: inspect bounded color areas and silhouettes on the original colored image. No grayscale conversion, intensity controls, bridges or SVG export in the current UI.
+Current stage: full-resolution color/grayscale segmentation, optional smoothing and small-region cleanup, and interactive comparison. Manual bleach assignment is available in the Assign workspace; project saving and stencil export are planned. See [the current plan and project memory](docs/STENCIL_EDITOR_PLAN.md); the sections below also retain historical implementation notes.
 
 ## Run
 
@@ -9,7 +9,7 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory stencil-app/dist
 node --test stencil-app/tests/*.test.mjs
 ```
 
-Open http://127.0.0.1:8765. Processing stays in the browser. PNG/JPEG/WebP files up to 25 MB are accepted and reduced to a longest dimension of 1000 pixels for inspection. Area sizes are measured at that working resolution.
+Open http://127.0.0.1:8765. Processing stays in the browser. PNG/JPEG/WebP files up to 25 MB are accepted at their original decoded resolution. Area sizes are measured in source image pixels; zoom changes only display size.
 
 ## Inspect
 
@@ -65,3 +65,29 @@ With cleanup enabled, comparison shows the same quantization before and after me
 ### Original resolution and zoom
 
 Uploads now retain their full decoded pixel dimensions throughout processing; the previous 1,000-pixel reduction is removed. Radius and area thresholds use original image pixels. Fit columns scales only the display. Zoom offers 25%, 50%, 100%, 200%, and 400%; 100% maps one source pixel to one CSS pixel. All comparison panels share the zoom, and enlargement expands the page with ordinary page scrolling. No nested image scroll windows or additional resampling are introduced by zoom. Larger originals require more processing time and memory.
+
+### Assign workspace
+
+The default Assign view places a translucent editable segmentation over the original, at identical native pixel dimensions. Tap/click a region, then choose Unbleached, Light, Medium or Strong; Unassign restores the blue unassigned state. These output choices are separate from segmentation palette groups and do not alter geometry. Opacity affects the overlay only. Hold the original button (pointer or Space/Enter) for an unobstructed reference. Undo/redo buttons and Ctrl/Cmd+Z / Shift+Ctrl/Cmd+Z edit assignment history.
+
+Prepare retains the existing inspection tools. Once assignments/history exist, segmentation controls lock; an explicit discard dialog is required to unlock them or replace the source. Cancel preserves edits. Navigation, zoom and display changes preserve assignments. Fully transparent and filtered-out pixels cannot be assigned through the image. There is no project persistence yet: the UI states this and leaving/reloading with edits requests a browser warning.
+
+### Palette assignment correction
+
+Assign now starts every region in its computed quantization group and offers that actual palette as swatches. Fixed Light/Medium/Strong categories have been removed. Change a region’s group or mark it unbleached; restore automatic group reverses its override. The selected-group action marks all regions currently assigned to that group unbleached in one undoable operation. Unbleached uses a dark hatch so it remains distinct from a black palette group. Source pixels and segmentation boundaries are unchanged. Seed-tolerance/silhouette modes have no quantization palette; use Quantized colors to edit palette groups.
+
+The next planned stage is a simple, refined UI revamp before project save/load.
+
+### Studio interface
+
+The editor now uses a neutral light interface with a compact Prepare/Assign header, global image import and a right-hand inspector. Assign keeps palette choices visible and puts whole-group actions and guidance in disclosures. Undo/redo sits above the canvas; opacity, original visibility and hold-to-compare are together. Prepare groups smoothing/cleanup, layer visibility and region inspection into expandable controls. On narrow screens tools move below the Assign canvas. Full-resolution zoom still expands the page without nested scrolling windows.
+
+Verified in the browser at desktop, 820px tablet and 390px narrow widths; this does not replace actual iPad/Pencil testing. Project persistence remains the next feature.
+
+### Fixed canvas workspace (current)
+
+The latest layout replaces page scrolling with a full-viewport drawing surface. Canvas tools and settings float above it. Tap/click selects; drag with the Pan tool, middle mouse, or Space to move. Touch drag pans and two-pointer pinch zooms around the gesture midpoint. Wheel zoom stays anchored to the pointer. Zoom buttons and Fit are available. The original and overlay share one camera transform and preserve their original raster dimensions. Floating inspectors can scroll; the page and canvas do not. This supersedes the earlier page-based zoom notes.
+
+### Navigation input split
+
+Trackpad scroll pans; trackpad pinch zooms at the pointer (Ctrl+wheel and Safari gesture events). Touchscreen two-finger movement only pans: changing finger separation does not change zoom. In Pick mode, a single-finger tap selects; a drag is not treated as a tap. Pan mode permits one-finger dragging. V/H switch Pick/Pan, and holding Space on the canvas temporarily pans. Zoom slider, +/− and Fit provide alternatives to pinching. Slider and gestures change only the shared camera, not segmentation or raster dimensions. Physical iPad and trackpad gesture testing is still pending.

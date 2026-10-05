@@ -1,11 +1,22 @@
+import { createViewport } from './viewport.mjs?v=compact-4';
+import { setupAssign } from './assign-ui.mjs?v=compact-4';
 import { createRenderer } from './render.mjs';
-import { groupLayers } from './layers.mjs';
 const $ = id => document.getElementById(id);
+const assignment=setupAssign(edited=>{
+  $('detection-controls').disabled=edited;$('edit-lock').hidden=!edited;
+});
+async function confirmReset(){
+  if(!assignment.edited)return true;
+  const dialog=$('discard-dialog');if(dialog.open)return false;
+  return new Promise(resolve=>{dialog.addEventListener('close',()=>resolve(dialog.returnValue==='discard'),{once:true});dialog.showModal();});
+}
+function setStage(stage){document.body.dataset.stage=stage;for(const name of ['prepare','assign'])$('stage-'+name).setAttribute('aria-pressed',String(stage===name));$('toggle-inspector').textContent=stage==='prepare'?'⚙ Prepare':'◧ Groups';camera.refresh();}
 const render=createRenderer();
 let preparedBase;
+let committedMinimum=20;
 const canvas = $('canvas'), context = canvas.getContext('2d');
 let source, base, smoothedBase, result, worker, timer, revision = 0, uploadRevision = 0;
-let layers = [], hiddenLayers = new Set(), selectedLayer = -1;
+let hiddenLayers = new Set(), selectedLayer = -1;
 let hover = -1, selected = -1, picking = false, drawQueued = false;
 let inspectSide = 'after', hoverSide = 'after', sideStates = {};
 const segmentationFor = side => side === 'before' ? result?.baseline || result : result;
@@ -19,7 +30,7 @@ function switchInspection(side) {
   inspectSide=side;
   hiddenLayers=state.hiddenLayers;selected=state.selected;selectedLayer=state.selectedLayer;hover=-1;
   $('inspect-side').value=side;
-  buildLayers();updateList();
+  renderPalette();
   const data=inspected();
   $('status').textContent=`${data.regions.length.toLocaleString()} areas · ${data.ignoredPixels.toLocaleString()} pixels in filtered-out regions`;
 }
@@ -29,23 +40,27 @@ function syncControls() {
   const quant = $('mode').value === 'quantized';
   const gray=quant && $('color-space').value==='grayscale';
   $('group-label').textContent=gray?'Brightness groups':'Color groups';
-  $('image-view').options[0].textContent=gray?'Grayscale input':'Original';
+  $('assignment-group-title').textContent=gray?'Intensity groups':'Color groups';
+  $('palette-settings').hidden=!quant;
   $('quantized-settings').hidden = !quant;
   $('color-space-settings').hidden = !quant;
   $('smoothing-settings').hidden = !quant;
+  $('preprocessing-details').hidden = !quant;
   $('cleanup-settings').hidden = !quant;
   $('cleanup-controls').hidden = !$('cleanup').checked;
   const stage=$('cleanup').checked?'cleanup':'smoothing';
-  $('compare-label').textContent=`Compare segmentation before / after ${stage}`;
+  $('compare-label').textContent=`Compare before / after ${stage}`;
   $('original-compare').setAttribute('aria-label',`Segmentation before ${stage} with its own boundaries`);
   $('smoothed-compare').setAttribute('aria-label',`Segmentation after ${stage} with its own boundaries`);
   for(const option of $('inspect-side').options)option.textContent=`${option.value==='before'?'Before':'After'} ${stage}`;
-  $('compare').disabled = !quant;
-  if(!quant)$('compare').checked=false;
+  const canCompare=quant && ($('cleanup').checked || $('smoothing').checked);
+  $('compare-control').hidden=!canCompare;
+  $('compare').disabled=!canCompare;
+  if(!canCompare)$('compare').checked=false;
   $('smoothing-controls').hidden = !$('smoothing').checked;
   $('radius-value').textContent = `${$('smooth-radius').value} px`;
   $('strength-value').textContent = $('smooth-strength').value;
-  $('layer-panel').hidden = !quant;
+
   $('color-count-value').textContent = $('color-count').value;
   const sil = $('mode').value === 'silhouette', alpha = $('background-mode').value === 'alpha';
   $('background-settings').hidden = !sil;
@@ -54,25 +69,22 @@ function syncControls() {
   $('tolerance-label').textContent = sil ? 'Background tolerance' : 'Color tolerance';
   $('tolerance-value').textContent = `${$('tolerance').value}%`;
   $('alpha-value').textContent = `${$('alpha').value}%`;
-  $('mode-help').textContent = quant && gray ? 'Convert to grayscale, then group similar brightness and find connected pieces. More groups preserve smaller brightness differences.' : quant ? 'Reduce the image to a palette, then find connected pieces of each color. Fewer colors simplify; more colors preserve distinctions.' : sil ? 'Separate foreground silhouettes and background areas; ignore internal foreground colors. Holes remain separate background regions.' : 'Group connected pixels similar to a starting color. Gradients split into areas; increasing tolerance generally produces broader areas.';
 }
 
 function compute() {
+  if(assignment.edited)return;
   syncControls(); cancelPick();
-  if(!$('smoothing').checked || $('mode').value!=='quantized')$('image-view').value='original';
   if (!source) return;
   clearTimeout(timer); worker?.terminate();
   const current = ++revision;
-  hover = selected = -1; result = null; smoothedBase = null; preparedBase = null; syncImageView(); $('palette').replaceChildren();
-  layers = []; hiddenLayers = new Set(); sideStates = {}; inspectSide = hoverSide = 'after'; $('inspect-side').value='after'; selectedLayer = -1; $('layers').replaceChildren();
-  $('region').replaceChildren(new Option('Computing…','')); $('region').disabled = true;
-  $('status').textContent = 'Computing areas…'; draw();
+  hover = selected = -1; result = null; smoothedBase = null; preparedBase = null; $('palette').replaceChildren();
+  hiddenLayers = new Set(); sideStates = {}; inspectSide = hoverSide = 'after'; $('inspect-side').value='after'; selectedLayer = -1;
+  $('status').textContent = 'Computing areas…'; assignment.update({source,base,result:null});draw();
   timer = setTimeout(() => {
     const hex = $('background').value;
-    const value = Number($('min-size').value);
+    const value = $('min-size').value.trim()===''?committedMinimum:Number($('min-size').value);
     const minSize = Math.max(1, Math.min(1000000, Number.isFinite(value) ? Math.round(value) : 1));
-    $('min-size').value = minSize;
-    worker = new Worker('./region-worker.mjs', {type:'module'});
+    worker = new Worker('./region-worker.mjs?v=compact-4', {type:'module'});
     const fail = message => {
       if (current !== revision) return;
       $('status').textContent = 'Detection failed'; $('error').textContent = message;
@@ -81,9 +93,9 @@ function compute() {
     worker.onmessage = ({data}) => {
       if (data.revision !== revision) return;
       if (data.error) { fail(data.error); return; }
-      result = data; $('error').textContent = ''; buildSmoothedView(); buildPaletteView(); buildLayers(); syncImageView();
+      result = data; $('error').textContent = ''; buildSmoothedView(); renderPalette();
       $('status').textContent = `${data.regions.length.toLocaleString()} areas · ${data.ignoredPixels.toLocaleString()} pixels in filtered-out regions`;
-      $('region').disabled = false; updateList(); draw(); worker.terminate();
+      assignment.update({source,base,result});draw(); worker.terminate();
     };
     worker.postMessage({revision:current, pixels:source.data, width:source.width, height:source.height,
       options:{cleanup:$('cleanup').checked,cleanupSize:Number($('cleanup-size').value),colorSpace:$('color-space').value,smoothing:$('smoothing').checked, smoothRadius:Number($('smooth-radius').value), smoothStrength:Number($('smooth-strength').value)/100, mode:$('mode').value, colorCount:Number($('color-count').value), tolerance:Number($('tolerance').value)/100,
@@ -92,12 +104,6 @@ function compute() {
   }, 140);
 }
 
-function syncImageView() {
-  const enabled=Boolean(smoothedBase);
-  $('image-view').options[1].disabled=!enabled;
-  // Reduced palette is a separate view; underlying image choice is retained.
-  $('image-view').disabled=$('show-palette').checked && $('mode').value==='quantized';
-}
 function composite(pixels) {
   const output=new Uint8ClampedArray(base);
   for(let i=0;i<base.length;i+=4)for(let c=0;c<3;c++)
@@ -109,79 +115,45 @@ function buildSmoothedView() {
   if(result.smoothed)smoothedBase=composite(result.smoothed);
 }
 
-function buildPaletteView() {
-  if(!result.palette) return;
-  result.palette.forEach((rgb,i)=>{
-    const item=document.createElement('span'), chip=document.createElement('i');
+function renderPalette() {
+  $('palette').replaceChildren();
+  const colors=inspected()?.palette || [];
+  colors.forEach((rgb,id)=>{
+    const button=document.createElement('button'),chip=document.createElement('i');
+    const hidden=hiddenLayers.has(id);
+    button.type='button';button.className='palette-toggle';button.classList.toggle('is-hidden',hidden);
+    button.setAttribute('aria-label',`${hidden?'Show':'Hide'} group ${id+1}`);button.setAttribute('aria-pressed',String(!hidden));
     chip.className='swatch';chip.style.background=`rgb(${rgb.join(',')})`;
-    item.append(chip, String(i+1));item.title=`Palette ${i+1}: RGB ${rgb.join(', ')}`;$('palette').append(item);
-  });
-}
-
-function buildLayers() {
-  layers = groupLayers(inspected().palette || [], inspected().regions);
-  renderLayers();
-}
-function renderLayers() {
-  $('layers').replaceChildren();
-  for (const layer of layers) {
-    const row=document.createElement('div'); row.className='layer-row';
-    const visible=document.createElement('input'); visible.type='checkbox';
-    visible.checked=!hiddenLayers.has(layer.id);
-    visible.setAttribute('aria-label',`Show layer ${layer.id+1}`);
-    visible.addEventListener('change',()=>{
-      if(visible.checked) hiddenLayers.delete(layer.id); else hiddenLayers.add(layer.id);
-      if(hiddenLayers.has(layer.id)) {
-        if(selectedLayer===layer.id) selectedLayer=-1;
-        if(inspected().regions[selected]?.paletteIndex===layer.id) selected=-1;
-        hover=-1;
-      }
-      renderLayers(); updateList(); draw();
-    });
-    const button=document.createElement('button'); button.className='layer-button';
-    button.disabled=hiddenLayers.has(layer.id);
-    button.setAttribute('aria-pressed',String(selectedLayer===layer.id));
-    const chip=document.createElement('i');chip.className='swatch';chip.style.background=`rgb(${layer.color.join(',')})`;
-    button.append(chip,`Layer ${layer.id+1} · ${layer.regionIds.length} areas`);
+    const eye=document.createElementNS('http://www.w3.org/2000/svg','svg');eye.setAttribute('viewBox','0 0 24 24');eye.setAttribute('aria-hidden','true');eye.classList.add('visibility-eye');
+    const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d',hidden?'M3 3L21 21M9 5C5 6 2 12 2 12s4 7 10 7c2 0 4-1 5-2M14 5c5 1 8 7 8 7l-3 4':'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0');eye.append(path);
+    button.append(chip,String(id+1),eye);
     button.addEventListener('click',()=>{
-      selectedLayer=selectedLayer===layer.id?-1:layer.id;selected=hover=-1;
-      renderLayers();updateList();draw();
-    });
-    row.append(visible,button);$('layers').append(row);
-  }
+      if(hiddenLayers.has(id))hiddenLayers.delete(id);else hiddenLayers.add(id);
+      if(hiddenLayers.has(inspected()?.regions[selected]?.paletteIndex))selected=-1;
+      hover=-1;selectedLayer=-1;renderPalette();draw();
+    });$('palette').append(button);
+  });
 }
 function visibleRegion(id) {
   return id >= 0 && !hiddenLayers.has(inspected().regions[id]?.paletteIndex) ? id : -1;
 }
 
-function updateList() {
-  $('region').replaceChildren(new Option('None',''));
-  const eligible = inspected().regions.filter(r=>!hiddenLayers.has(r.paletteIndex));
-  const listed = eligible.slice(0,200);
-  if (selected >= 0 && !listed.some(r=>r.id===selected)) listed.push(inspected().regions[selected]);
-  for (const r of listed) $('region').add(new Option(`#${r.id+1} · ${r.kind} · ${r.area.toLocaleString()} px`, String(r.id)));
-  $('region').value = selected < 0 ? '' : String(selected);
-  $('region-help').textContent = eligible.length > 200 ? 'List shows the 200 largest areas and your selection. Hover or click any other area on the image.' : 'You can also hover or click directly on the image.';
-}
-
 function draw() {
   if (!base) return;
   drawComparison();
+  camera.refresh();
   if(!$('compare').checked)render(canvas,{
-    pixels:picking ? base : $('image-view').value==='smoothed' && smoothedBase ? smoothedBase : preparedBase || base,
+    pixels:base,
     base,source:source.data,segmentation:picking?null:result,width:canvas.width,height:canvas.height,
     hidden:hiddenLayers,palette:!picking && $('show-palette').checked,edges:$('outlines').checked,
     hover,selected,layer:selectedLayer
   });
-  const id = hover >= 0 ? hover : selected;
-  const r = (hover >= 0 ? segmentationFor(hoverSide) : inspected())?.regions[id];
-  $('detail').textContent = r ? `${id===hover ? 'Hover' : 'Selected'} #${id+1} · ${r.kind} · ${r.area.toLocaleString()} pixels (${(r.area/(canvas.width*canvas.height)*100).toFixed(2)}%) · Bounds ${r.bounds[2]-r.bounds[0]+1} × ${r.bounds[3]-r.bounds[1]+1} px` : selectedLayer >= 0 ? `Layer ${selectedLayer+1} · ${layers[selectedLayer].regionIds.length} areas · ${layers[selectedLayer].area.toLocaleString()} pixels` : result && !result.regions.length ? 'No areas meet the minimum size. Lower Minimum area.' : 'No area selected.';
+
 }
 function drawComparison() {
   const comparing=$('compare').checked;
   $('comparison').hidden=!comparing;$('single-image').hidden=comparing;
-  for(const id of ['instruction','detail','boundary-legend'])$(id).hidden=false;
-  $('image-view').parentElement.hidden=comparing;
   document.querySelector('.workspace').classList.toggle('comparing',comparing);
   if(!comparing)return;
   render($('source-compare'),{pixels:base,width:canvas.width,height:canvas.height});
@@ -191,31 +163,25 @@ function drawComparison() {
     ['smoothed-compare',smoothedBase || preparedBase || base,result,'smoothed-caption','after']]) {
     const state=stateFor(side);
     render($(id),{pixels,base,source:source.data,segmentation,width:canvas.width,height:canvas.height,
-      hidden:state.hiddenLayers,palette:$('compare-colors').checked,edges:$('compare-boundaries').checked,
+      hidden:state.hiddenLayers,palette:$('show-palette').checked,edges:$('outlines').checked,
       hover:hoverSide===side?hover:-1,selected:state.selected,layer:state.selectedLayer});
     $(caption).textContent=`${side==='before'?'Before':'After'} ${result?.comparison || ($('cleanup').checked?'cleanup':'smoothing')} · ${segmentation?segmentation.regions.length.toLocaleString()+' areas':'computing…'}`;
   }
-  $('compare-note').textContent=result ? (result.cleanup ? `Cleanup changed ${result.cleanup.changedPixels.toLocaleString()} pixels; smoothing and quantization are held constant. Set Minimum area to 1 to see every fragment. ` : '') + 'The original stays unchanged. Click a result to inspect it; sidebar selection and visibility apply to that result.' : 'Computing both segmentation results…';
 }
 
 function scheduleDraw() { if(!drawQueued) {drawQueued=true; requestAnimationFrame(()=>{drawQueued=false;draw();});} }
 function cancelPick() {
   picking=false; canvas.style.cursor=''; $('pick').textContent='Pick background from image'; $('pick').setAttribute('aria-pressed','false');
-  $('instruction').textContent='Hover to inspect. Click to pin an area. Escape clears the selection.';
 }
 function point(event) {
   const rect=event.currentTarget.getBoundingClientRect();
   return Math.min(canvas.height-1,Math.max(0,Math.floor((event.clientY-rect.top)*canvas.height/rect.height)))*canvas.width+
     Math.min(canvas.width-1,Math.max(0,Math.floor((event.clientX-rect.left)*canvas.width/rect.width)));
 }
-function updateZoom() {
-  const fit=$('zoom').value==='fit', scale=fit?1:Number($('zoom').value)/100;
-  const grid=document.querySelector('.compare-grid'),single=$('single-image');
-  grid.style.width=fit?'':`${3*(canvas.width*scale+2)+24}px`;
-  single.style.width=fit?'':`${canvas.width*scale+2}px`;
-  $('zoom-help').textContent=fit?'Fit changes display size only; processing uses every original pixel.':'100% = one image pixel per CSS pixel. Scroll the page to inspect enlarged images.';
-}
-function setSource(image,name) {
+function updateZoom(){camera.preset($('zoom').value);}
+async function setSource(image,name) {
+  if(!await confirmReset())return;
+  assignment.reset();
   const w=image.naturalWidth||image.width, h=image.naturalHeight||image.height;
   canvas.width=w; canvas.height=h;
   context.clearRect(0,0,canvas.width,canvas.height); context.drawImage(image,0,0,canvas.width,canvas.height);
@@ -249,29 +215,29 @@ $('file').addEventListener('change',async event=>{
   const file=event.target.files[0];if(!file)return;const request=++uploadRevision;
   if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>25*1024*1024){$('error').textContent='Choose a PNG, JPG or WebP smaller than 25 MB.';return;}
   const url=URL.createObjectURL(file);
-  try {const image=new Image();image.src=url;await image.decode();if(request===uploadRevision)setSource(image,file.name);}
+  try {const image=new Image();image.src=url;await image.decode();if(request===uploadRevision)await setSource(image,file.name);}
   catch {if(request===uploadRevision)$('error').textContent='Could not open this image.';}
   finally {URL.revokeObjectURL(url);}
 });
-for(const id of ['cleanup','cleanup-size','color-space','mode','background-mode','background','tolerance','alpha','min-size','color-count','smoothing','smooth-radius','smooth-strength']) $(id).addEventListener('input',compute);
-$('outlines').addEventListener('change',()=>{$('compare-boundaries').checked=$('outlines').checked;draw();});
-$('show-palette').addEventListener('change',()=>{syncImageView();draw();});
-$('image-view').addEventListener('change',draw);
+for(const id of ['cleanup','color-space','mode','background-mode','background','tolerance','alpha','color-count','smoothing','smooth-radius','smooth-strength']) $(id).addEventListener('input',compute);
+$('outlines').addEventListener('change',draw);
+$('show-palette').addEventListener('change',draw);
 $('compare').addEventListener('change',()=>{
-  if($('compare').checked && !$('smoothing').checked && !$('cleanup').checked){$('smoothing').checked=true;compute();}
-  else {if(!$('compare').checked)switchInspection('after');draw();}
+  if(!$('compare').checked)switchInspection('after');draw();
 });
 $('inspect-side').addEventListener('change',()=>{switchInspection($('inspect-side').value);draw();});
-$('compare-colors').addEventListener('change',drawComparison);
-$('compare-boundaries').addEventListener('change',()=>{$('outlines').checked=$('compare-boundaries').checked;draw();});
+for(const id of ['min-size','cleanup-size'])$(id).addEventListener('change',()=>{
+  const fallback=id==='min-size'?committedMinimum:20;
+  const value=$(id).value.trim()===''?fallback:Number($(id).value);
+  $(id).value=Math.max(1,Math.min(1000000,Math.round(value)||fallback));
+  if(id==='min-size')committedMinimum=Number($(id).value);
+  compute();
+});
 $('zoom').addEventListener('change',updateZoom);
 $('demo').addEventListener('click',sample);
-$('region').addEventListener('change',()=>{selected=$('region').value===''?-1:Number($('region').value);hover=-1;selectedLayer=-1;renderLayers();draw();});
-$('clear').addEventListener('click',()=>{selected=hover=selectedLayer=-1;renderLayers();cancelPick();if(result)updateList();draw();});
 $('pick').addEventListener('click',()=>{
   if(picking){cancelPick();draw();return;}
   $('compare').checked=false; picking=true; hover=-1; canvas.style.cursor='crosshair'; $('pick').textContent='Cancel picking';$('pick').setAttribute('aria-pressed','true');
-  $('instruction').textContent='Click a background color in the image. Escape cancels.';draw();canvas.scrollIntoView({block:'nearest'});
 });
 canvas.addEventListener('pointermove',event=>{if(picking||!result)return;hoverSide='after';const id=visibleRegion(result.labels[point(event)]);if(id!==hover){hover=id;scheduleDraw();}});
 canvas.addEventListener('pointerleave',()=>{hover=-1;scheduleDraw();});
@@ -284,7 +250,7 @@ canvas.addEventListener('click',event=>{
     compute();return;
   }
   if(!result)return;
-  const id=visibleRegion(result.labels[i]);selected=selected===id?-1:id; hover=-1;selectedLayer=-1;renderLayers();updateList();draw();
+  const id=visibleRegion(result.labels[i]);selected=selected===id?-1:id; hover=-1;selectedLayer=-1;renderPalette();draw();
 });
 for(const [id,side] of [['original-compare','before'],['smoothed-compare','after']]) {
   const target=$(id);
@@ -300,8 +266,12 @@ for(const [id,side] of [['original-compare','before'],['smoothed-compare','after
     switchInspection(side);
     const region=visibleRegion(inspected().labels[point(event)]);
     selected=selected===region?-1:region;hover=-1;selectedLayer=-1;
-    renderLayers();updateList();draw();
+    renderPalette();draw();
   });
 }
-document.addEventListener('keydown',event=>{if(event.key==='Escape'){cancelPick();selected=hover=selectedLayer=-1;renderLayers();if(result)updateList();draw();}});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'){cancelPick();selected=hover=selectedLayer=-1;renderPalette();draw();}});
+for(const stage of ['prepare','assign'])$('stage-'+stage).addEventListener('click',()=>setStage(stage));
+$('reset-assignments').addEventListener('click',async()=>{if(await confirmReset())assignment.reset();});
+window.addEventListener('beforeunload',event=>{if(assignment.edited){event.preventDefault();event.returnValue='';}});
+const camera=createViewport();
 syncControls();sample();

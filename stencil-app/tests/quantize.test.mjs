@@ -33,6 +33,12 @@ test('disconnected areas retain separate region identities despite shared palett
 });
 test('gradient uses bounded reproducible palette without requesting nonexistent colors',()=>{
  const data=Uint8ClampedArray.from(Array.from({length:256},(_,i)=>[i,i,255-i,255]).flat());
- for(const k of [2,8,16]){const q=quantize(data,k);assert.equal(q.palette.length,k);assert.ok(q.labels.every(x=>x>=0&&x<k));}
+ for(const k of [1,2,8]){const q=quantize(data,k);assert.equal(q.palette.length,k);assert.ok(q.labels.every(x=>x>=0&&x<k));}
  const flat=Uint8ClampedArray.from([20,40,80,255,20,40,80,255]);assert.equal(quantize(flat,16).palette.length,1);
+});
+
+test('palette requests are capped at eight groups',()=>{
+ const data=Uint8ClampedArray.from(Array.from({length:256},(_,i)=>[i,i,i,255]).flat());
+ assert.deepEqual(quantize(data,16),quantize(data,8));
+ const single=quantize(data,1);assert.equal(single.palette.length,1);assert.ok(single.labels.every(x=>x===0));
 });

@@ -2,7 +2,7 @@ import { mergeSmallRegions } from './cleanup.mjs';
 import { detectRegions } from './regions.mjs';
 import { bilateral } from './smooth.mjs';
 import { grayscale } from './grayscale.mjs';
-import { quantize } from './quantize.mjs';
+import { quantize } from './quantize.mjs?v=compact-4';
 self.onmessage = ({data: {revision, pixels, width, height, options}}) => {
   try {
     const prepared=options.mode==='quantized' && options.colorSpace==='grayscale' ? grayscale(pixels) : pixels;
