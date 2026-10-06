@@ -8,7 +8,7 @@ The user explicitly replaced page scrolling with a drawing-app viewport: no page
 
 ## Compact controls update
 
-Default to Quantized mode and grayscale brightness, with 1–8 groups. Keep cards compact: no explanatory paragraphs, no Inspect regions section, no duplicate visibility controls, and assignment actions directly visible. Show boundaries is the single outline toggle. Show reduced colors and clickable palette swatches control Prepare rendering; hidden swatches carry a crossed-eye indicator. Compare is available only with quantized smoothing/cleanup, stays in place when toggled, and compares independent results. Numeric area fields commit on change so clearing a field does not insert a leading 1. Preserve the fixed canvas and native image resolution.
+New visits and refreshes start in Prepare. Default to Quantized mode and grayscale brightness, with 1–8 groups. Keep cards compact: no explanatory paragraphs, no Inspect regions section, no duplicate visibility controls, and assignment actions directly visible. Show boundaries is the single outline toggle. Show reduced colors and clickable palette swatches control Prepare rendering; hidden swatches carry a crossed-eye indicator. Compare is available only with quantized smoothing/cleanup, stays in place when toggled, and compares independent results. Numeric area fields commit on change so clearing a field does not insert a leading 1. Preserve the fixed canvas and native image resolution.
 
 ## Latest decisions — supersede fixed-intensity details below
 
@@ -27,7 +27,7 @@ Work incrementally. Keep explanations concise, with simple descriptions of the a
 ## Implemented foundation
 
 - Original-resolution raster loading and synchronized Fit/25–400% display zoom.
-- Deterministic OKLab color quantization; optional grayscale conversion before the same pipeline. Currently 2–16 segmentation groups.
+- Deterministic OKLab color quantization; optional grayscale conversion before the same pipeline. Currently 1–8 segmentation groups.
 - Optional bilateral smoothing, connected-component detection, and optional smallest-first cleanup merging into the neighbor with the longest shared four-connected border.
 - Cleanup preserves transparent gaps; minimum-area visibility filtering remains a separate operation.
 - Original plus before/after comparison, independent region selection and layer visibility, cached rendering for hover performance.

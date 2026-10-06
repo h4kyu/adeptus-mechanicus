@@ -7,13 +7,13 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='5' fill='%23151a22'/%3E%3Cpath d='M8 8h16v16H8z' fill='none' stroke='%23b5ef64' stroke-width='3'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css?v=compact-4">
 </head>
-<body data-stage="assign">
+<body data-stage="prepare">
 <header class="app-header"><div class="brand"><span class="brand-mark" aria-hidden="true">◩</span><h1>Stencil <span>studio</span></h1></div>
-<nav class="stage-nav" aria-label="Workspace"><button id="stage-prepare" aria-pressed="false"><span>01</span> Prepare</button><button id="stage-assign" aria-pressed="true"><span>02</span> Assign</button></nav>
+<nav class="stage-nav" aria-label="Workspace"><button id="stage-prepare" aria-pressed="true"><span>01</span> Prepare</button><button id="stage-assign" aria-pressed="false"><span>02</span> Assign</button></nav>
 <div class="file-actions"><label class="upload" for="file">Open image<input id="file" type="file" accept="image/png,image/jpeg,image/webp"></label><details class="source-menu"><summary aria-label="Image options">•••</summary><div><button id="demo" class="secondary">Load color sample</button></div></details></div></header>
 <div class="document-bar"><span id="filename"></span><span class="local-note">Local session · not saved</span></div><p id="error" role="alert"></p>
 <div id="canvas-viewport" data-tool="select"><div id="canvas-world"></div></div>
-<div class="tool-island" aria-label="Canvas tools"><button id="tool-select" title="Pick (V)" aria-pressed="true">↖ Pick</button><button id="tool-pan" title="Pan (H), or hold Space on the canvas" aria-pressed="false">✥ Pan</button><span class="tool-divider"></span><button id="toggle-inspector" aria-expanded="false" aria-controls="inspector">◧ Groups</button><button id="toggle-settings" aria-expanded="false" aria-controls="floating-settings">⚙ Settings</button></div>
+<div class="tool-island" aria-label="Canvas tools"><button id="tool-select" title="Pick (V)" aria-pressed="true">↖ Pick</button><button id="tool-pan" title="Pan (H), or hold Space on the canvas" aria-pressed="false">✥ Pan</button><span class="tool-divider"></span><button id="toggle-inspector" aria-expanded="false" aria-controls="inspector">⚙ Prepare</button><button id="toggle-settings" aria-expanded="false" aria-controls="floating-settings">⚙ Settings</button></div>
 <div class="zoom-island"><button id="camera-out" aria-label="Zoom out">−</button><input id="camera-slider" type="range" min="-6.643856" max="5" step="0.01" value="0" aria-label="Canvas zoom"><output id="camera-scale">100%</output><button id="camera-in" aria-label="Zoom in">+</button><button id="camera-fit">Fit</button></div>
 <div id="floating-settings" hidden><div class="island-heading"><h2>Canvas settings</h2><button id="close-settings" aria-label="Close canvas settings">×</button></div><div id="view-settings" class="assign-only"></div><div id="prepare-settings" class="prepare-only"></div></div>
 <main><aside id="inspector" hidden aria-label="Editing tools"><div class="island-heading"><span>TOOLS</span><button id="close-inspector" aria-label="Close tools">×</button></div>
