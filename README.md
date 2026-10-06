@@ -1,11 +1,11 @@
 # Stencil region inspector
 
-Current stage: full-resolution color/grayscale segmentation, optional smoothing and small-region cleanup, and interactive comparison. Manual bleach assignment is available in the Assign workspace; project saving and stencil export are planned. See [the current plan and project memory](docs/STENCIL_EDITOR_PLAN.md); the sections below also retain historical implementation notes.
+Current stage: full-resolution color/grayscale segmentation, optional smoothing and small-region cleanup, and interactive comparison. Manual group assignment is available in the Assign workspace, with a local project library, autosave and portable project backups. Stencil export is planned. See [the current plan and project memory](docs/STENCIL_EDITOR_PLAN.md); the sections below also retain historical implementation notes.
 
 ## Run
 
 ```sh
-python3 -m http.server 8765 --bind 127.0.0.1 --directory stencil-app/dist
+node stencil-app/server.mjs
 node --test stencil-app/tests/*.test.mjs
 ```
 
@@ -91,3 +91,25 @@ The latest layout replaces page scrolling with a full-viewport drawing surface. 
 ### Navigation input split
 
 Trackpad scroll pans; trackpad pinch zooms at the pointer (Ctrl+wheel and Safari gesture events). Touchscreen two-finger movement only pans: changing finger separation does not change zoom. In Pick mode, a single-finger tap selects; a drag is not treated as a tap. Pan mode permits one-finger dragging. V/H switch Pick/Pan, and holding Space on the canvas temporarily pans. Zoom slider, +/− and Fit provide alternatives to pinching. Slider and gestures change only the shared camera, not segmentation or raster dimensions. Physical iPad and trackpad gesture testing is still pending.
+
+### Project library (current)
+
+Start with **New project**, **Try a sample**, or a saved thumbnail. The project-name dropdown opens **All projects**, Rename, Export project, Import project and Retry saving. Library cards provide Rename and Delete; deleting asks for confirmation.
+
+Autosave stores the full-resolution original, exact region maps, palette, assignments, settings and view as `.stencil.json` files in `stencil-app/projects/`. Wait for **Saved in repo** before closing. Switching projects waits for pending processing and saving; reopening does not recompute segmentation. Undo history starts fresh when reopening. Storage failures preserve the open work and display an error.
+
+Export a `.stencil.json` file for backups or transfers. Import creates a separate project. Project files live in the repo folder on this computer and are shared by browsers using the local server. Clearing browser data does not remove them. The project folder is git-ignored; Git does not back it up. There is no automatic cross-device sync. Portable files contain decoded full-resolution arrays and may be substantially larger than the original compressed image.
+
+Run the Node test suite above; it includes isolated disk and localhost HTTP tests for saving, reopening, migration, deletion, failed writes and request access checks. The legacy `tests/projects.browser.html` checks browser storage only, retained for migration testing.
+
+### Explicit assignment ownership (current)
+
+New segmentations start unassigned in Assign. Select a region, then explicitly assign a palette group or mark it unbleached. **Clear assignment** makes it available again. Only assigned areas receive overlay color; the counter shows assigned regions. Existing saved projects keep their saved assignments; Reset assignments clears all of them. Future lasso/brush tools will skip already-assigned pixels by default, so overlapping selections cannot silently move them to another group.
+
+### Repo project storage
+
+The Node server is required for saving; the old `python3 -m http.server` command only serves static files and cannot save projects. Run `node stencil-app/server.mjs` from the repo root, then open `http://127.0.0.1:8765`. The server binds only to this computer. To choose another port, use `PORT=8767 node stencil-app/server.mjs`. Project paths are resolved relative to the server file, not the terminal's working directory.
+
+Use **Copy browser projects to repo** once in the library to copy older IndexedDB projects from the same browser profile and site address. Browser copies remain intact, and existing repo project IDs are never overwritten. Repeating the copy skips existing IDs; because browser copies remain, copying again after deleting a repo project can restore that old browser copy. Other browser profiles or site addresses require exporting/importing or running the new server at the old address.
+
+Saves write and sync a temporary file, then atomically replace the previous project. A failed save keeps the editor open and reports an error. Files currently use the portable JSON format and have a 512 MB per-project save limit; originals are never downsampled to fit. Back up `stencil-app/projects/` or export individual projects.

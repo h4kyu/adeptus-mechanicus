@@ -1,5 +1,5 @@
 import {zoomAt,fitCamera,wheelCamera,panBetween} from './camera.mjs?v=input-3';
-export function createViewport() {
+export function createViewport(onChange=()=>{}) {
   const $=id=>document.getElementById(id), viewport=$('canvas-viewport'),world=$('canvas-world');
   const single=$('single-image'),comparison=document.querySelector('.compare-grid'),assigned=$('assign-surface');
   for(const node of [single,comparison,assigned])world.append(node);
@@ -9,7 +9,7 @@ export function createViewport() {
   const pointers=new Map();let camera={scale:1,x:0,y:0},signature='',space=false,gesture=false,suppressUntil=0,mode='select',last=null,nativePinch=false,lastPinchScale=1,lastTouch=-Infinity;
   const active=()=>document.body.dataset.stage==='assign'?assigned:$('compare').checked?comparison:single;
   function dimensions(){const c=$('canvas');return {width:active()===comparison?c.width*3+24:c.width,height:c.height+(active()===comparison?30:0)};}
-  function paint(){world.style.transform=`translate(${camera.x}px,${camera.y}px) scale(${camera.scale})`;$('camera-scale').textContent=`${Math.round(camera.scale*100)}%`;$('camera-slider').value=Math.log2(camera.scale);$('camera-slider').setAttribute('aria-valuetext',`${Math.round(camera.scale*100)} percent`);}
+  function paint(){onChange();world.style.transform=`translate(${camera.x}px,${camera.y}px) scale(${camera.scale})`;$('camera-scale').textContent=`${Math.round(camera.scale*100)}%`;$('camera-slider').value=Math.log2(camera.scale);$('camera-slider').setAttribute('aria-valuetext',`${Math.round(camera.scale*100)} percent`);}
   function fit(){const d=dimensions();camera=fitCamera(d.width,d.height,viewport.clientWidth,viewport.clientHeight);paint();}
   function zoom(factor,x=viewport.clientWidth/2,y=viewport.clientHeight/2){camera=zoomAt(camera,factor,x,y);paint();}
   function refresh(){
@@ -74,7 +74,7 @@ export function createViewport() {
   $('toggle-settings').addEventListener('click',()=>{const open=$('floating-settings').hidden;$('floating-settings').hidden=!open;if(open){$('inspector').hidden=true;$('toggle-inspector').setAttribute('aria-expanded','false');}$('toggle-settings').setAttribute('aria-expanded',String(open));});
   $('close-settings').addEventListener('click',()=>{$('floating-settings').hidden=true;$('toggle-settings').setAttribute('aria-expanded','false');});
   document.addEventListener('keydown',e=>{
-    if(e.target.closest('input,select,textarea,[contenteditable="true"]') || e.ctrlKey || e.metaKey || e.altKey)return;
+    if(document.querySelector('dialog[open]') || e.target.closest('input,select,textarea,[contenteditable="true"]') || e.ctrlKey || e.metaKey || e.altKey)return;
     if(e.code==='Space'){
       // Keep native Space activation for controls; the canvas gets temporary Pan.
       if(e.target.closest('button,summary'))return;
@@ -87,5 +87,5 @@ export function createViewport() {
   document.addEventListener('keyup',e=>{if(e.code==='Space'){space=false;toolState();}});
   window.addEventListener('blur',()=>{space=false;pointers.clear();gesture=false;nativePinch=false;toolState();});
   new ResizeObserver(()=>{if(signature)fit();}).observe(viewport);
-  return {refresh,fit,preset(value){if(value==='fit')fit();else zoom(Number(value)/100/camera.scale);}};
+  return {refresh,fit,snapshot(){return {...camera};},restore(value){if(value)camera={...value};else {fit();return;}paint();},preset(value){if(value==='fit')fit();else zoom(Number(value)/100/camera.scale);}};
 }

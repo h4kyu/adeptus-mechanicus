@@ -1,19 +1,21 @@
 import { createViewport } from './viewport.mjs?v=compact-4';
 import { setupAssign } from './assign-ui.mjs?v=compact-4';
 import { createRenderer } from './render.mjs';
+import {setupProjects} from './project-ui.mjs';
+let projects;
 const $ = id => document.getElementById(id);
 const assignment=setupAssign(edited=>{
-  $('detection-controls').disabled=edited;$('edit-lock').hidden=!edited;
+  $('detection-controls').disabled=edited;$('edit-lock').hidden=!edited;projects?.changed();
 });
 async function confirmReset(){
   if(!assignment.edited)return true;
-  const dialog=$('discard-dialog');if(dialog.open)return false;
+  const dialog=$('discard-dialog');if(dialog.open)return false;dialog.returnValue='cancel';
   return new Promise(resolve=>{dialog.addEventListener('close',()=>resolve(dialog.returnValue==='discard'),{once:true});dialog.showModal();});
 }
-function setStage(stage){document.body.dataset.stage=stage;for(const name of ['prepare','assign'])$('stage-'+name).setAttribute('aria-pressed',String(stage===name));$('toggle-inspector').textContent=stage==='prepare'?'⚙ Prepare':'◧ Groups';camera.refresh();}
+function setStage(stage){document.body.dataset.stage=stage;for(const name of ['prepare','assign'])$('stage-'+name).setAttribute('aria-pressed',String(stage===name));$('toggle-inspector').textContent=stage==='prepare'?'⚙ Prepare':'◧ Groups';camera.refresh();projects?.changed();}
 const render=createRenderer();
 let preparedBase;
-let committedMinimum=20;
+let committedMinimum=20,committedCleanup=20;
 const canvas = $('canvas'), context = canvas.getContext('2d');
 let source, base, smoothedBase, result, worker, timer, revision = 0, uploadRevision = 0;
 let hiddenLayers = new Set(), selectedLayer = -1;
@@ -84,23 +86,24 @@ function compute() {
     const hex = $('background').value;
     const value = $('min-size').value.trim()===''?committedMinimum:Number($('min-size').value);
     const minSize = Math.max(1, Math.min(1000000, Number.isFinite(value) ? Math.round(value) : 1));
-    worker = new Worker('./region-worker.mjs?v=compact-4', {type:'module'});
     const fail = message => {
       if (current !== revision) return;
-      $('status').textContent = 'Detection failed'; $('error').textContent = message;
+      $('status').textContent = 'Detection failed'; $('error').textContent = message;document.dispatchEvent(new CustomEvent('segmentation-failed',{detail:message}));
     };
+    try {worker = new Worker('./region-worker.mjs?v=compact-4', {type:'module'});
     worker.onerror = () => fail('Could not compute areas. Try a smaller image or reload the editor.');
     worker.onmessage = ({data}) => {
       if (data.revision !== revision) return;
       if (data.error) { fail(data.error); return; }
       result = data; $('error').textContent = ''; buildSmoothedView(); renderPalette();
       $('status').textContent = `${data.regions.length.toLocaleString()} areas · ${data.ignoredPixels.toLocaleString()} pixels in filtered-out regions`;
-      assignment.update({source,base,result});draw(); worker.terminate();
+      assignment.update({source,base,result});draw(); worker.terminate();document.dispatchEvent(new Event('segmentation-ready'));projects?.changed();
     };
     worker.postMessage({revision:current, pixels:source.data, width:source.width, height:source.height,
       options:{cleanup:$('cleanup').checked,cleanupSize:Number($('cleanup-size').value),colorSpace:$('color-space').value,smoothing:$('smoothing').checked, smoothRadius:Number($('smooth-radius').value), smoothStrength:Number($('smooth-strength').value)/100, mode:$('mode').value, colorCount:Number($('color-count').value), tolerance:Number($('tolerance').value)/100,
         backgroundMode:$('background-mode').value, background:[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)),
         alphaCutoff:Number($('alpha').value)/100, minSize}});
+    }catch(error){fail(error.message);}
   }, 140);
 }
 
@@ -131,7 +134,7 @@ function renderPalette() {
     button.addEventListener('click',()=>{
       if(hiddenLayers.has(id))hiddenLayers.delete(id);else hiddenLayers.add(id);
       if(hiddenLayers.has(inspected()?.regions[selected]?.paletteIndex))selected=-1;
-      hover=-1;selectedLayer=-1;renderPalette();draw();
+      hover=-1;selectedLayer=-1;renderPalette();draw();projects?.changed();
     });$('palette').append(button);
   });
 }
@@ -179,13 +182,22 @@ function point(event) {
     Math.min(canvas.width-1,Math.max(0,Math.floor((event.clientX-rect.left)*canvas.width/rect.width)));
 }
 function updateZoom(){camera.preset($('zoom').value);}
-async function setSource(image,name) {
-  if(!await confirmReset())return;
+async function setSource(image,name,request=++uploadRevision) {
+  await projects.flush();if(request!==uploadRevision)return;
   assignment.reset();
+  applySettings(defaultSettings);setStage('prepare');
   const w=image.naturalWidth||image.width, h=image.naturalHeight||image.height;
   canvas.width=w; canvas.height=h;
   context.clearRect(0,0,canvas.width,canvas.height); context.drawImage(image,0,0,canvas.width,canvas.height);
   source=context.getImageData(0,0,canvas.width,canvas.height);
+  const transparent=buildBase();
+  $('background-mode').value=transparent?'alpha':'color'; $('background').value='#ffffff';
+  $('filename').textContent=name; $('error').textContent='';
+  $('dimensions').textContent=`${canvas.width} × ${canvas.height} px · original resolution`;
+  document.body.classList.remove('no-project');projects.created(name);
+  camera.fit();compute();
+}
+function buildBase(){
   base=new Uint8ClampedArray(source.data.length);
   let transparent=false;
   for(let i=0;i<source.data.length;i+=4) {
@@ -194,10 +206,7 @@ async function setSource(image,name) {
     for(let k=0;k<3;k++) base[i+k]=source.data[i+k]*a+checker*(1-a);
     base[i+3]=255; if(a===0) transparent=true;
   }
-  $('background-mode').value=transparent?'alpha':'color'; $('background').value='#ffffff';
-  $('filename').textContent=name; $('error').textContent='';
-  $('dimensions').textContent=`${canvas.width} × ${canvas.height} px · original resolution`;
-  updateZoom();compute();
+  return transparent;
 }
 function sample() {
   uploadRevision++; $('file').value='';
@@ -209,14 +218,14 @@ function sample() {
   ctx.fillStyle=gradient; ctx.fillRect(70,310,740,100);
   ctx.font='bold 140px sans-serif';ctx.fillStyle='#25855b';ctx.fillText('BO',580,230);
   ctx.font='24px sans-serif';ctx.fillStyle='#242833';ctx.fillText('Solids · touching colors · holes · gradient',70,520);
-  setSource(image,'Color and boundary sample');
+  setSource(image,'Color and boundary sample').catch(e=>projects.report(e));
 }
 $('file').addEventListener('change',async event=>{
-  const file=event.target.files[0];if(!file)return;const request=++uploadRevision;
+  const file=event.target.files[0];event.target.value='';if(!file)return;const request=++uploadRevision;
   if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>25*1024*1024){$('error').textContent='Choose a PNG, JPG or WebP smaller than 25 MB.';return;}
   const url=URL.createObjectURL(file);
-  try {const image=new Image();image.src=url;await image.decode();if(request===uploadRevision)await setSource(image,file.name);}
-  catch {if(request===uploadRevision)$('error').textContent='Could not open this image.';}
+  try {const image=new Image();image.src=url;await image.decode();if(request===uploadRevision)await setSource(image,file.name,request);}
+  catch(e) {if(request===uploadRevision)projects.report(e);}
   finally {URL.revokeObjectURL(url);}
 });
 for(const id of ['cleanup','color-space','mode','background-mode','background','tolerance','alpha','color-count','smoothing','smooth-radius','smooth-strength']) $(id).addEventListener('input',compute);
@@ -230,7 +239,7 @@ for(const id of ['min-size','cleanup-size'])$(id).addEventListener('change',()=>
   const fallback=id==='min-size'?committedMinimum:20;
   const value=$(id).value.trim()===''?fallback:Number($(id).value);
   $(id).value=Math.max(1,Math.min(1000000,Math.round(value)||fallback));
-  if(id==='min-size')committedMinimum=Number($(id).value);
+  if(id==='min-size')committedMinimum=Number($(id).value);else committedCleanup=Number($(id).value);
   compute();
 });
 $('zoom').addEventListener('change',updateZoom);
@@ -250,7 +259,7 @@ canvas.addEventListener('click',event=>{
     compute();return;
   }
   if(!result)return;
-  const id=visibleRegion(result.labels[i]);selected=selected===id?-1:id; hover=-1;selectedLayer=-1;renderPalette();draw();
+  const id=visibleRegion(result.labels[i]);selected=selected===id?-1:id; hover=-1;selectedLayer=-1;renderPalette();draw();projects?.changed();
 });
 for(const [id,side] of [['original-compare','before'],['smoothed-compare','after']]) {
   const target=$(id);
@@ -269,9 +278,46 @@ for(const [id,side] of [['original-compare','before'],['smoothed-compare','after
     renderPalette();draw();
   });
 }
-document.addEventListener('keydown',event=>{if(event.key==='Escape'){cancelPick();selected=hover=selectedLayer=-1;renderPalette();draw();}});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!document.querySelector('dialog[open]')){cancelPick();selected=hover=selectedLayer=-1;renderPalette();draw();}});
 for(const stage of ['prepare','assign'])$('stage-'+stage).addEventListener('click',()=>setStage(stage));
 $('reset-assignments').addEventListener('click',async()=>{if(await confirmReset())assignment.reset();});
-window.addEventListener('beforeunload',event=>{if(assignment.edited){event.preventDefault();event.returnValue='';}});
-const camera=createViewport();
-syncControls();sample();
+
+const camera=createViewport(()=>projects?.changed());
+const settingIds=['mode','color-space','color-count','cleanup','cleanup-size','smoothing','smooth-radius','smooth-strength','background-mode','background','tolerance','alpha','min-size','outlines','show-palette','compare','overlay-opacity','show-original'];
+function readSettings(){return Object.fromEntries(settingIds.map(id=>[id,id==='min-size'?String(committedMinimum):id==='cleanup-size'?String(committedCleanup):$(id).type==='checkbox'?$(id).checked:$(id).value]));}
+const defaultSettings=readSettings();
+function validateSettings(settings){
+  for(const id of settingIds){const node=$(id),v=settings[id];
+    if(node.type==='checkbox'){if(typeof v!=='boolean')throw Error('Invalid project settings.');}
+    else if(typeof v!=='string'||(node.tagName==='SELECT'&&![...node.options].some(o=>o.value===v))||(node.type==='color'&&!/^#[0-9a-f]{6}$/i.test(v))||(['number','range'].includes(node.type)&&(!v.trim()||!Number.isFinite(Number(v))||Number(v)<Number(node.min||0)||Number(v)>Number(node.max||1000000))))throw Error('Invalid project settings.');
+  }
+}
+function applySettings(settings){
+  validateSettings(settings);
+  for(const id of settingIds){const node=$(id);if(node.type==='checkbox')node.checked=settings[id];else node.value=settings[id];}
+  committedMinimum=Number($('min-size').value);committedCleanup=Number($('cleanup-size').value);syncControls();
+  $('overlay-opacity').dispatchEvent(new Event('input'));$('show-original').dispatchEvent(new Event('change'));
+}
+function ready(){if(result)return Promise.resolve();if($('status').textContent==='Detection failed')return Promise.reject(Error('Fix the detection settings before saving.'));return new Promise((resolve,reject)=>{
+  const clean=()=>{document.removeEventListener('segmentation-ready',ok);document.removeEventListener('segmentation-failed',fail);};
+  const ok=()=>{clean();resolve();},fail=e=>{clean();reject(Error(e.detail));};
+  document.addEventListener('segmentation-ready',ok);document.addEventListener('segmentation-failed',fail);
+});}
+let thumbnailSource,thumbnailData;
+function thumbnail(image){if(image===thumbnailSource)return thumbnailData;const c=document.createElement('canvas'),scale=Math.min(1,240/image.width,160/image.height);c.width=Math.max(1,Math.round(image.width*scale));c.height=Math.max(1,Math.round(image.height*scale));const full=document.createElement('canvas');full.width=image.width;full.height=image.height;full.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(image.data),image.width,image.height),0,0);c.getContext('2d').drawImage(full,0,0,c.width,c.height);thumbnailSource=image;thumbnailData=c.toDataURL('image/png');return thumbnailData;}
+projects=setupProjects({sample,validateSettings,thumbnail,
+  async snapshot(){await ready();return {source:{width:source.width,height:source.height,data:source.data},result,assignments:assignment.snapshot(),settings:readSettings(),filename:$('filename').textContent,thumbnail:thumbnail(source),view:{stage:document.body.dataset.stage,camera:camera.snapshot(),hiddenLayers:[...hiddenLayers],inspectSide,selected,selectedLayer,sideStates:Object.fromEntries(Object.entries(sideStates).map(([key,value])=>[key,{...value,hiddenLayers:[...value.hiddenLayers]}]))}};},
+  async restore(p){
+    validateSettings(p.settings);clearTimeout(timer);worker?.terminate();revision++;uploadRevision++;cancelPick();
+    canvas.width=p.source.width;canvas.height=p.source.height;source=new ImageData(new Uint8ClampedArray(p.source.data),canvas.width,canvas.height);buildBase();result=p.result;smoothedBase=preparedBase=null;buildSmoothedView();
+    applySettings(p.settings);inspectSide=p.view.inspectSide==='before'?'before':'after';$('inspect-side').value=inspectSide;
+    const state=(v={})=>({hiddenLayers:new Set(Array.isArray(v.hiddenLayers)?v.hiddenLayers.filter(x=>Number.isInteger(x)&&x>=0&&x<8):[]),selected:Number.isInteger(v.selected)?v.selected:-1,selectedLayer:Number.isInteger(v.selectedLayer)?v.selectedLayer:-1});
+    ({hiddenLayers,selected,selectedLayer}=state(p.view));sideStates={before:state(p.view.sideStates?.before),after:state(p.view.sideStates?.after)};hover=-1;
+    assignment.update({source,base,result});assignment.restore(p.assignments);$('filename').textContent=typeof p.filename==='string'?p.filename:p.name;
+    $('dimensions').textContent=`${canvas.width} × ${canvas.height} px · original resolution`;$('error').textContent='';
+    $('status').textContent=`${result.regions.length.toLocaleString()} areas · ${result.ignoredPixels.toLocaleString()} pixels in filtered-out regions`;
+    document.body.classList.remove('no-project');setStage(p.view.stage==='assign'?'assign':'prepare');renderPalette();draw();camera.restore(p.view.camera);
+  },
+  clear(){clearTimeout(timer);worker?.terminate();revision++;uploadRevision++;source=base=result=thumbnailSource=thumbnailData=null;assignment.update({source:{width:1,height:1},base:new Uint8ClampedArray(4),result:null});document.body.classList.add('no-project');$('filename').textContent='';$('dimensions').textContent='';$('status').textContent='';}
+});
+syncControls();document.body.classList.add('no-project');projects.start();

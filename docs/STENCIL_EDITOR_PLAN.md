@@ -1,6 +1,31 @@
 # Stencil editor plan and project memory
 
-Updated: 2026-10-05. This is the current direction; older README sections describe incremental experiments and may be historical.
+Updated: 2026-10-06. This is the current direction; older README sections describe incremental experiments and may be historical.
+
+## Assignment ownership — latest direction
+
+- New segmentation starts with every region unassigned, even when its automatic quantization group is known. Automatic groups provide palette choices and region geometry, not manual ownership. The Assign overlay colors only explicitly assigned regions.
+- Assign to a group or mark explicitly unbleached; Clear assignment releases the region. Count explicitly assigned regions, including those assigned to their original computed group. Undo/redo and project persistence preserve unassigned status. Existing saved projects retain their saved assignments; Reset assignments clears them.
+- Future lasso/brush tools must exclude already-assigned pixels by default, including explicitly unbleached pixels. Explicit reassignment remains possible; no implicit reassignment through overlapping selections.
+
+## Repo storage — latest direction
+
+- The editor now runs with `node stencil-app/server.mjs`, serving the same loopback address on port 8765. Static-only preview servers cannot save projects.
+- Autosave writes versioned `.stencil.json` files into `stencil-app/projects/`, ignored by Git. It syncs a temporary file before atomic replacement. Save errors retain the open editor state; no silent browser-storage fallback. Maximum save payload is 512 MB, with no image downsampling.
+- The library offers **Copy browser projects to repo** for older IndexedDB projects at the same browser profile/address. Copying is explicit, retains browser copies, and never overwrites an existing repo project ID. Repeating migration can restore a previously deleted repo project from its old browser copy.
+- The server is loopback-only, validates request host/origin and project data, limits file access to the project folder, and serves only editor assets. It does not expose the repo as a static website.
+
+## Project library — implemented
+
+- Startup opens a local project library with thumbnails, names and last-edited times. New project chooses an image; a sample is also available. New projects start in Prepare with the default settings.
+- The project-name menu opens the library, renames the current project, exports/imports a project file, and retries saving. Library cards open, rename or delete projects. Deletion names the project in an explicit confirmation; deleting the current project returns to the library.
+- Debounced autosave stores full-resolution decoded source pixels, exact segmentation (including comparison data), palette, manual group/unbleached assignments, settings, stage, visibility and camera as portable files in the git-ignored `stencil-app/projects/` folder through `node stencil-app/server.mjs`. Switching or creating projects waits for pending segmentation and saving. Reopening restores saved segmentation without recomputing it. Undo/redo starts fresh; restored manual assignments still protect segmentation settings.
+- Versioned `.stencil.json` export/import provides portable backups. Import validates pixel arrays, region maps, palette assignments and settings, and creates a separate project rather than replacing an existing ID. No cross-device sync; projects live on disk and survive clearing browser data. Git does not back up the ignored folder. A storage failure keeps the open project available, displays an error and allows export/retry.
+- Checks: unit coverage for lossless project round trips, malformed data and restored-assignment protection; isolated browser checks for the legacy store, plus disk and HTTP tests for create/list/reopen/rename/delete, migration, failed-save preservation and access boundaries. UI checks covered sample creation, renaming, reload/reopen, restored unbleached assignment, and importing a complete project. Native backup download completion and actual iPad testing still need device verification.
+
+## TODO — layers menu
+
+- [ ] Add a dedicated layers menu with toggleable visibility. Keep it compact and consistent with the floating tools. This is a future UI task; do not implement it as part of project persistence.
 
 ## Canvas interaction update — latest user direction
 
@@ -12,7 +37,7 @@ New visits and refreshes start in Prepare. Default to Quantized mode and graysca
 
 ## Latest decisions — supersede fixed-intensity details below
 
-- Assign edits the actual quantization palette, not fixed Light/Medium/Strong output categories. Regions begin in their automatic group; swatches use computed colors/gray values. Reassign regions among these groups, restore automatic assignment, or mark a region/current group explicitly unbleached. Boundaries remain unchanged. This correction is now implemented with undo/redo.
+- Assign edits the actual quantization palette, not fixed Light/Medium/Strong output categories. Regions begin unassigned; swatches use computed colors/gray values. Assign regions explicitly, clear an assignment, or mark a region/current group explicitly unbleached. Boundaries remain unchanged. This correction is now implemented with undo/redo.
 - Before project save/load, do a dedicated UI revamp. The user requests a modern, aesthetic, simple and refined interface, using suitable available frontend skills or MCP capabilities when that stage begins. Keep it organized, touch-friendly and uncluttered. The first UI revamp is now implemented: warm neutral palette, compact header, image-first workspace with right-side inspector, contextual disclosures, and responsive layouts.
 - Revised order: actual-group assignment → UI revamp → project save/load → pixel selections and boundary editing. Physical bleach intensity mapping and stencil export remain later.
 
@@ -33,7 +58,7 @@ Work incrementally. Keep explanations concise, with simple descriptions of the a
 - Original plus before/after comparison, independent region selection and layer visibility, cached rendering for hover performance.
 - With cleanup enabled, comparison isolates before/after cleanup with smoothing and quantization held constant. Otherwise it compares before/after smoothing. Both segmented panels are already quantized.
 - First Assign workspace implemented: original-aligned translucent overlay, opacity, hold-to-show-original, region assignment to unbleached/light/medium/strong, unassign, undo/redo and explicit discard protection.
-- Assignments currently live only in the tab. No project save/load, drawing tools, bridging or SVG export yet.
+- Projects now persist locally with a library and portable import/export. No drawing tools, bridging or SVG export yet.
 
 ## Agreed editing direction
 
@@ -69,7 +94,7 @@ Acceptance: changing a selected region's bucket changes only its intended treatm
 
 ### 2. Pixel selection overrides
 
-Lasso and brush select pixels independently of detected regions. Assign or reassign selected pixels to a bucket, joining a silhouette conceptually even if texture produced many automatic fragments. Include undo/redo and non-destructive source handling.
+Lasso and brush select pixels independently of detected regions. By default, exclude pixels already assigned to any group or explicitly unbleached; a broad selection must never implicitly move them into another group. Reassignment requires an explicit action (or clearing their assignment first). This lets users build groups from the remaining unassigned pixels, joining a silhouette even if texture produced many automatic fragments. Include undo/redo and non-destructive source handling. These tools remain deferred.
 
 ### 3. Boundary refinement
 
@@ -95,4 +120,4 @@ The iPad model, iPadOS version and Apple Pencil availability are still unknown. 
 
 ## Next recommended action
 
-Review the revamped UI with real artwork, then implement durable project save/load. The revamp preserves full-resolution page-based zoom and the original-aligned translucent editing workflow. Browser checks covered desktop, tablet-width and narrow layouts; actual iPad/Pencil testing remains outstanding. Lasso/brush overrides and boundary editing follow persistence. Do not treat this roadmap as authorization to implement every stage at once.
+Review the project library and autosave with real artwork, including backup export/import on the intended browser. Then proceed to lasso/brush pixel overrides and boundary editing in small stages. The dedicated layers menu is recorded above as a separate TODO. Preserve the fixed, no-scroll viewport, floating controls and original-resolution translucent overlay. Actual iPad/Pencil testing remains outstanding. Do not treat this roadmap as authorization to implement every stage at once.

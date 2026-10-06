@@ -1,4 +1,4 @@
-import {createAssignments,UNBLEACHED} from './assignments.mjs?v=palette-groups-2';
+import {createAssignments,UNASSIGNED,UNBLEACHED} from './assignments.mjs?v=palette-groups-2';
 export function setupAssign(onChange) {
   const $=id=>document.getElementById(id), original=$('assign-original'),overlay=$('assign-overlay'),outline=$('assign-outline');
   let snapshot=null,model=createAssignments(),selected=-1;
@@ -15,13 +15,13 @@ export function setupAssign(onChange) {
   }
   function controls() {
     const r=snapshot?.result?.regions[selected],value=model.values[selected],editable=!!r && model.automatic[selected]>=0;
-    $('assign-selection').textContent=r?`Area ${selected+1} · ${r.area.toLocaleString()} pixels · ${value===UNBLEACHED?'Unbleached':value>=0?'Group '+(value+1):'No palette group'}`:!snapshot?.result?'Computing regions…':palette().length?'No area selected':'Assignment requires Quantized mode.';
+    $('assign-selection').textContent=r?`Area ${selected+1} · ${r.area.toLocaleString()} pixels · ${value===UNBLEACHED?'Unbleached':value>=0?'Group '+(value+1):editable?'Unassigned':'No palette group'}`:!snapshot?.result?'Computing regions…':palette().length?'No area selected':'Assignment requires Quantized mode.';
     document.querySelectorAll('[data-bucket]').forEach(button=>{button.disabled=!editable;button.setAttribute('aria-pressed',String(!!r && value===Number(button.dataset.bucket)));});
     $('assign-undo').disabled=!model.canUndo;$('assign-redo').disabled=!model.canRedo;
-    let changed=0;for(let i=0;i<model.values.length;i++)if(model.values[i]!==model.automatic[i])changed++;
-    $('assign-restore').disabled=!editable || value===model.automatic[selected];
+    let changed=0;for(let i=0;i<model.values.length;i++)if(model.values[i]!==UNASSIGNED)changed++;
+    $('assign-restore').disabled=!editable || value===UNASSIGNED;
     $('unbleach-group').disabled=!editable || value<0;
-    $('assign-count').textContent=snapshot?.result?`${changed} changed`:'Computing…';
+    $('assign-count').textContent=snapshot?.result?`${changed} assigned`:'Computing…';
     $('reset-assignments').hidden=!model.edited;
     onChange(model.edited);
   }
@@ -83,12 +83,14 @@ export function setupAssign(onChange) {
     selected=id===selected?-1:id;paintSelection();controls();
   });
   document.addEventListener('keydown',event=>{
-    if(document.body.dataset.stage!=='assign'||/INPUT|SELECT|TEXTAREA/.test(event.target.tagName))return;
+    if(document.querySelector('dialog[open]')||document.body.dataset.stage!=='assign'||/INPUT|SELECT|TEXTAREA/.test(event.target.tagName))return;
     if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='z'){event.preventDefault();if(event.shiftKey?model.redo():model.undo())changed();}
     if(event.key==='Escape'){selected=-1;paintSelection();controls();showOriginal(false);}
   });
   return {
     get edited(){return model.edited;},
+    snapshot(){return model.values.slice();},
+    restore(values){model=newModel();model.values.set(values);selected=-1;paintOverlay();paintSelection();controls();},
     reset(){model=newModel();selected=-1;paintOverlay();paintSelection();controls();},
     update(next){snapshot=next;model=newModel();selected=-1;buildBuckets();
       for(const c of [original,overlay,outline]){c.width=next.source.width;c.height=next.source.height;}

@@ -1,0 +1,24 @@
+<!doctype html><meta charset="utf-8"><title>Project persistence integration tests</title>
+<h1>Project persistence integration tests</h1><pre id="results">Running…</pre>
+<script type="module">
+import {createBrowserProjectStore,encodeProject,decodeProject} from '../dist/projects.mjs';
+const output=document.querySelector('#results'),lines=[];
+const assert=(condition,message)=>{if(!condition)throw Error(message);lines.push('PASS: '+message);output.textContent=lines.join('\n');};
+try {
+  const name='stencil-test-'+crypto.randomUUID(),store=createBrowserProjectStore(name);
+  const first={id:'a',name:'First',updatedAt:1,source:{data:new Uint8ClampedArray([1,2,3,128])},assignments:new Int16Array([-2]),thumbnail:'test'};
+  const second={...first,id:'b',name:'Second',updatedAt:2};
+  await store.put(first);await store.put(second);
+  assert((await store.list()).map(p=>p.id).join(',')==='b,a','library lists newest projects first');
+  const reopened=await createBrowserProjectStore(name).get('a');
+  assert(reopened.source.data instanceof Uint8ClampedArray && reopened.source.data[3]===128 && reopened.assignments[0]===-2,'reopening storage preserves typed pixels and unbleached assignments');
+  first.name='Renamed';first.updatedAt=3;await store.put(first);
+  assert((await store.list())[0].name==='Renamed','rename updates library summary');
+  try {await store.put({...first,source:()=>{}});throw Error('Expected failure');}catch(e){assert(e.name==='DataCloneError','failed save rejects instead of claiming success');}
+  assert((await store.get('a')).source.data[0]===1,'failed save retains the previous saved project');
+  await store.delete('a');assert(!(await store.get('a'))&&(await store.list()).length===1,'delete removes both project data and its library entry');
+  assert((await store.get('b')).name==='Second','deleting one project preserves another');
+  await store.delete('b');assert((await store.list()).length===0,'deleting the last project leaves an empty library');
+  lines.push('All 8 browser storage checks passed.');output.textContent=lines.join('\n');
+} catch(e){output.textContent+='\nFAIL: '+e.stack;}
+</script>
