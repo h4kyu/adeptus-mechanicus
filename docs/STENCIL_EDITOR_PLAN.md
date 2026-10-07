@@ -2,6 +2,30 @@
 
 Updated: 2026-10-06. This is the current direction; older README sections describe incremental experiments and may be historical.
 
+## Assigned treatment unions — latest direction
+
+- **Double-click** a region to temporarily select just that original region inside an assigned treatment. Show its individual outline and an **Individual region** label; reassign, clear, or mark unbleached affects only that region. Selection alone does not alter ownership. A normal click, deselection, brush activation or reopening exits individual mode.
+- Clicking an assigned region selects and highlights **all regions with that treatment**, including disconnected pieces and Unbleached. Unassigned regions remain individually selectable. Clicking another member of the selected treatment toggles that group selection off.
+- Display boundaries are derived from current assignments: touching regions with the same assigned treatment have no internal seam. Distinct unassigned regions, different treatments, transparent holes and filtered gaps retain boundaries. Selection outlines use the same derived union.
+- Reassigning or clearing a selected treatment operates on all its member regions as one undoable action. The inspector reports treatment, region count and combined area; clearing is labelled **Clear group assignment**.
+- Original segmentation labels remain intact under this logical union. Assignment, brush completion, undo/redo, clear/reset and project reopen regenerate visible boundaries, preserving reversible edits and full-resolution source pixels.
+
+## Grouping brush and assignment feedback — implemented
+
+- Clicking empty canvas outside the artwork deselects region highlights. Panning/dragging does not clear selection accidentally.
+- **Mark unassigned pixels** adds a light dotted overlay to visible, unassigned pixels (including regions filtered out by minimum area); assigned regions retain treatment tint, and Unbleached retains its distinct hatch. This display preference saves with the project and does not depend on assignment-overlay opacity. Hold to compare hides all hints.
+- **Brush (B)** paints whole detected regions, not individual pixels. Choose a treatment in Assign and set the brush diameter in original-image pixels. The circular brush sweeps continuously between pointer events, including thin regions during fast strokes.
+- Strokes only claim unassigned, eligible regions. Already-assigned regions, including explicitly Unbleached, are skipped. Use Pick for explicit reassignment, or Clear assignment before brushing again. Filtered-out and transparent regions are not brush targets.
+- A stroke previews while dragging and commits on release as one undoable assignment operation; empty strokes add no history. Pointer cancellation, switching to navigation (including two-finger pan), Escape, and window blur cancel the pending preview. Original pixels and region geometry remain unchanged.
+- Verified with algorithm tests for continuous coverage, brush footprint, off-image clipping, ownership protection and stroke undo; browser checks cover painting, protected regions, undo and background deselection. Actual iPad/Pencil testing remains outstanding.
+
+## Unified editor and treatment palette — latest direction
+
+- Prepare and Assign share one original-resolution editing canvas. They are compact, independently expandable floating islands on the right, no longer header stages. Optional before/after comparison remains an inspection view.
+- The original image is the default base. Prepare offers **Show quantized** for the reduced-color preview; Assign offers **Show boundaries** for all selectable region outlines. Both toggles affect rendering only. Boundaries default off, and selecting a region still highlights its outline. Hold to compare temporarily shows the untouched original.
+- The darkest quantization slot is the **Unbleached** treatment; remaining slots are **Intensity 1**, **Intensity 2**, etc. Three quantized colors mean exactly one unbleached plus two intensity choices. Unassigned remains separate, and new regions still begin unassigned. Legacy assignments to palette slot 0 are interpreted as unbleached when reopened.
+- The whole-region **grouping brush** is now implemented as described above. Pixel-level lasso/brush overrides and boundary editing remain later steps.
+
 ## Assignment ownership — latest direction
 
 - New segmentation starts with every region unassigned, even when its automatic quantization group is known. Automatic groups provide palette choices and region geometry, not manual ownership. The Assign overlay colors only explicitly assigned regions.
@@ -17,7 +41,7 @@ Updated: 2026-10-06. This is the current direction; older README sections descri
 
 ## Project library — implemented
 
-- Startup opens a local project library with thumbnails, names and last-edited times. New project chooses an image; a sample is also available. New projects start in Prepare with the default settings.
+- Startup opens a local project library with thumbnails, names and last-edited times. New project chooses an image; a sample is also available. New projects start in the unified editor with the default settings.
 - The project-name menu opens the library, renames the current project, exports/imports a project file, and retries saving. Library cards open, rename or delete projects. Deletion names the project in an explicit confirmation; deleting the current project returns to the library.
 - Debounced autosave stores full-resolution decoded source pixels, exact segmentation (including comparison data), palette, manual group/unbleached assignments, settings, stage, visibility and camera as portable files in the git-ignored `stencil-app/projects/` folder through `node stencil-app/server.mjs`. Switching or creating projects waits for pending segmentation and saving. Reopening restores saved segmentation without recomputing it. Undo/redo starts fresh; restored manual assignments still protect segmentation settings.
 - Versioned `.stencil.json` export/import provides portable backups. Import validates pixel arrays, region maps, palette assignments and settings, and creates a separate project rather than replacing an existing ID. No cross-device sync; projects live on disk and survive clearing browser data. Git does not back up the ignored folder. A storage failure keeps the open project available, displays an error and allows export/retry.
@@ -33,7 +57,7 @@ The user explicitly replaced page scrolling with a drawing-app viewport: no page
 
 ## Compact controls update
 
-New visits and refreshes start in Prepare. Default to Quantized mode and grayscale brightness, with 1–8 groups. Keep cards compact: no explanatory paragraphs, no Inspect regions section, no duplicate visibility controls, and assignment actions directly visible. Show boundaries is the single outline toggle. Show reduced colors and clickable palette swatches control Prepare rendering; hidden swatches carry a crossed-eye indicator. Compare is available only with quantized smoothing/cleanup, stays in place when toggled, and compares independent results. Numeric area fields commit on change so clearing a field does not insert a leading 1. Preserve the fixed canvas and native image resolution.
+New visits open the project library; new projects use the unified editor. Default to Quantized mode and grayscale brightness, with 1–8 groups. Keep cards compact: no explanatory paragraphs, no Inspect regions section, no duplicate visibility controls, and assignment actions directly visible. Show boundaries is the single outline toggle. Show reduced colors and clickable palette swatches control Prepare rendering; hidden swatches carry a crossed-eye indicator. Compare is available only with quantized smoothing/cleanup, stays in place when toggled, and compares independent results. Numeric area fields commit on change so clearing a field does not insert a leading 1. **Filter small regions** toggles the minimum-area filter: off retains every region (effective minimum 1), disables the numeric field and remembers its threshold. The toggle persists per project; older projects default to enabled to preserve their existing settings. Preserve the fixed canvas and native image resolution.
 
 ## Latest decisions — supersede fixed-intensity details below
 

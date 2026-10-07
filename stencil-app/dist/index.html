@@ -5,19 +5,17 @@
 <title>Stencil Studio</title>
 <meta name="description" content="Inspect connected color areas and silhouette boundaries before making stencils.">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='5' fill='%23151a22'/%3E%3Cpath d='M8 8h16v16H8z' fill='none' stroke='%23b5ef64' stroke-width='3'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="style.css?v=projects-1">
+<link rel="stylesheet" href="style.css?v=editor-2">
 </head>
-<body data-stage="prepare">
+<body data-stage="editor">
 <header class="app-header"><div class="brand"><span class="brand-mark" aria-hidden="true">◩</span><h1>Stencil <span>studio</span></h1></div>
-<nav class="stage-nav" aria-label="Workspace"><button id="stage-prepare" aria-pressed="true"><span>01</span> Prepare</button><button id="stage-assign" aria-pressed="false"><span>02</span> Assign</button></nav>
+
 <div class="file-actions"><button id="project-new">New project</button><input id="file" type="file" accept="image/png,image/jpeg,image/webp" hidden></div></header>
 <div class="document-bar"><details class="project-menu"><summary><span id="project-title">Projects</span> ▾</summary><div><button id="all-projects">All projects</button><button id="project-rename">Rename</button><button id="project-export">Export project</button><button id="menu-import">Import project</button><button id="demo">New sample project</button><button id="project-retry">Retry saving</button></div></details><span id="filename" hidden></span><span id="save-status" role="status">No project open</span></div><p id="error" role="alert"></p>
 <div id="canvas-viewport" data-tool="select"><div id="canvas-world"></div></div>
-<div class="tool-island" aria-label="Canvas tools"><button id="tool-select" title="Pick (V)" aria-pressed="true">↖ Pick</button><button id="tool-pan" title="Pan (H), or hold Space on the canvas" aria-pressed="false">✥ Pan</button><span class="tool-divider"></span><button id="toggle-inspector" aria-expanded="false" aria-controls="inspector">⚙ Prepare</button><button id="toggle-settings" aria-expanded="false" aria-controls="floating-settings">⚙ Settings</button></div>
+<div class="tool-island" aria-label="Canvas tools"><button id="tool-select" title="Pick (V)" aria-pressed="true">↖ Pick</button><button id="tool-brush" title="Group brush (B)" aria-pressed="false">◉ Brush</button><button id="tool-pan" title="Pan (H), or hold Space on the canvas" aria-pressed="false">✥ Pan</button></div>
 <div class="zoom-island"><button id="camera-out" aria-label="Zoom out">−</button><input id="camera-slider" type="range" min="-6.643856" max="5" step="0.01" value="0" aria-label="Canvas zoom"><output id="camera-scale">100%</output><button id="camera-in" aria-label="Zoom in">+</button><button id="camera-fit">Fit</button></div>
-<div id="floating-settings" hidden><div class="island-heading"><h2>Canvas settings</h2><button id="close-settings" aria-label="Close canvas settings">×</button></div><div id="view-settings" class="assign-only"></div><div id="prepare-settings" class="prepare-only"></div></div>
-<main><aside id="inspector" hidden aria-label="Editing tools"><div class="island-heading"><span>TOOLS</span><button id="close-inspector" aria-label="Close tools">×</button></div>
-<section class="prepare-only"><h2>Prepare</h2>
+<main><aside id="editor-panels" aria-label="Editor settings"><details id="prepare-island" class="editor-island"><summary>Prepare</summary><div id="prepare-panel" class="island-content">
 <p id="edit-lock" hidden>Assignments are protected. Reset them below to change segmentation.</p>
 <button id="reset-assignments" hidden>Reset assignments to edit segmentation</button>
 <fieldset id="detection-controls">
@@ -53,25 +51,25 @@
 </div>
 <div id="tolerance-settings"><label class="threshold-label" for="tolerance"><span id="tolerance-label">Color tolerance</span><output id="tolerance-value">15%</output></label>
 <input id="tolerance" type="range" min="0" max="100" value="15"></div>
+<label class="check"><input id="min-size-enabled" type="checkbox" checked> Filter small regions</label>
 <label for="min-size">Minimum area (pixels)</label>
 <input id="min-size" type="number" min="1" max="1000000" step="1" value="20">
 
-</fieldset><div id="palette-settings"><label class="check"><input id="show-palette" type="checkbox"> Show reduced colors</label>
-<div id="palette" class="legend" aria-label="Computed palette"></div></div></section>
-<section class="assign-only"><h2>Groups</h2><p class="selection-card" id="assign-selection" aria-live="polite">No area selected</p>
-<h3 id="assignment-group-title">Intensity groups</h3><div id="assignment-actions"><div class="bucket-buttons" id="assignment-groups"></div><button data-bucket="-2" class="secondary">Mark unbleached</button></div>
+</fieldset><div id="palette-settings"><label class="check"><input id="show-palette" type="checkbox"> Show quantized</label>
+<div id="palette" class="legend" aria-label="Computed palette"></div></div><div id="prepare-settings"></div></div></details>
+<details id="assign-island" class="editor-island"><summary>Assign</summary><div id="assign-panel" class="island-content"><p class="selection-card" id="assign-selection" aria-live="polite">No area selected</p>
+<h3 id="assignment-group-title">Intensity groups</h3><div id="assignment-actions"><div class="bucket-buttons" id="assignment-groups"></div></div>
 <div class="selection-footer"><span id="assign-count"></span><button id="assign-clear" class="text-button">Deselect</button></div>
 <div class="assign-secondary"><button id="assign-restore" class="secondary">Clear assignment</button><button id="unbleach-group" class="secondary">Make group unbleached</button></div>
-
-
-</section>
+<div id="brush-settings" hidden><label for="brush-size">Brush diameter <output id="brush-size-value">32 px</output></label><input id="brush-size" type="range" min="1" max="128" value="32"><p class="muted" id="brush-help">Choose a treatment above. Paint whole regions; assigned regions are skipped.</p><p id="brush-status" role="status" class="muted"></p></div>
+<label class="check"><input id="assignment-hints" type="checkbox" checked> Mark unassigned pixels</label><p class="assignment-legend"><span class="unassigned-key"></span> Unassigned · dotted <span class="assigned-key"></span> Assigned · tinted</p><div id="view-settings"></div></div></details>
 </aside>
 <div class="workspace">
 <div class="canvas-meta"><span id="status" role="status">Loading…</span><span id="dimensions"></span></div>
 <div class="canvas-toolbar"><div class="zoom-control"><label for="zoom">Zoom</label><select id="zoom"><option value="fit">Fit</option><option value="25">25%</option><option value="50">50%</option><option value="100">100% · actual pixels</option><option value="200">200%</option><option value="400">400%</option></select></div><div class="history-tools assign-only"><button id="assign-undo" disabled title="Undo (⌘/Ctrl Z)">↶ Undo</button><button id="assign-redo" disabled title="Redo (⇧ ⌘/Ctrl Z)">↷ Redo</button></div></div>
 
 <div class="prepare-only" id="prepare-view">
-<label class="check"><input id="outlines" type="checkbox" checked> Show boundaries</label>
+<label class="check"><input id="outlines" type="checkbox"> Show boundaries</label>
 <label class="check" id="compare-control"><input id="compare" type="checkbox"> <span id="compare-label">Compare before / after cleanup</span></label>
 <div id="comparison" hidden><label for="inspect-side">Active result</label><select id="inspect-side"><option value="before">Before cleanup</option><option value="after" selected>After cleanup</option></select>
 <div class="compare-grid"><figure><figcaption>Original · unquantized</figcaption><div class="compare-pane"><canvas id="source-compare" aria-label="Original unquantized image without boundaries"></canvas></div></figure><figure><figcaption id="original-caption">Before smoothing</figcaption><div class="compare-pane"><canvas id="original-compare" aria-label="Quantization before smoothing with its own boundaries"></canvas></div></figure><figure><figcaption id="smoothed-caption">After smoothing</figcaption><div class="compare-pane"><canvas id="smoothed-compare" aria-label="Quantization after smoothing with its own boundaries"></canvas></div></figure></div>
@@ -81,11 +79,12 @@
 </div>
 <div class="assign-only" id="assign-view"><div class="overlay-tools"><label for="overlay-opacity">Overlay opacity <output id="overlay-value">50%</output></label><input id="overlay-opacity" type="range" min="0" max="100" value="50"><label class="check original-toggle"><input id="show-original" type="checkbox" checked> Show original</label><button id="peek-original">Hold to compare</button></div>
 
-<div id="assign-surface"><canvas id="assign-original" aria-label="Original image"></canvas><canvas id="assign-overlay" aria-hidden="true"></canvas><canvas id="assign-outline" aria-label="Select a region to assign a palette group"></canvas></div></div>
+<div id="assign-surface"><canvas id="assign-original" aria-label="Original image"></canvas><canvas id="assign-quantized" aria-hidden="true"></canvas><canvas id="assign-overlay" aria-hidden="true"></canvas><canvas id="assign-hints" aria-hidden="true"></canvas><canvas id="assign-boundaries" aria-hidden="true"></canvas><canvas id="assign-outline" aria-label="Select a region to assign a palette group"></canvas></div></div>
 </div>
 </main>
 <dialog id="discard-dialog" aria-labelledby="discard-title"><form method="dialog"><h2 id="discard-title">Discard manual assignments?</h2><p>This clears your assignments and undo history. Your original image stays untouched. This reset will be saved automatically.</p><div class="edit-actions"><button value="cancel" autofocus>Keep editing</button><button value="discard">Discard assignments</button></div></form></dialog>
 <dialog id="project-library" aria-labelledby="library-title"><div class="library-heading"><div><p class="eyebrow">STENCIL STUDIO</p><h2 id="library-title">Your projects</h2></div><button id="library-close" aria-label="Close project library">×</button></div><p class="muted">Saved as files in stencil-app/projects/ in this repo. Export a project for an extra backup.</p><div class="library-actions"><button id="library-new">New project</button><button id="library-import">Import project</button><button id="library-sample">Try a sample</button></div><button id="library-migrate" class="text-button">Copy browser projects to repo</button><p id="migration-status" class="muted" role="status"></p><input id="project-import" type="file" accept=".json,.stencil" hidden><p id="project-error" role="alert"></p><p id="project-empty" class="muted">No projects yet. Start with an image or try the sample.</p><div id="project-grid"></div></dialog>
 <dialog id="project-dialog" aria-labelledby="project-dialog-title"><form method="dialog"><h2 id="project-dialog-title"></h2><p id="project-dialog-message"></p><label id="project-name-label" for="project-name">Project name<input id="project-name" maxlength="200" autocomplete="off"></label><div class="edit-actions"><button value="cancel" formnovalidate>Cancel</button><button id="project-dialog-action" value="accept">Save name</button></div></form></dialog>
-<script type="module" src="app.mjs?v=projects-1"></script>
+<script type="module" src="app.mjs?v=editor-2"></script>
+<div id="brush-cursor" hidden aria-hidden="true"></div>
 </body></html>

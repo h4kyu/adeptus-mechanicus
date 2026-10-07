@@ -67,8 +67,8 @@ export function setupProjects(editor) {
   $('project-import').addEventListener('change',e=>{const file=e.target.files[0];e.target.value='';if(!file)return;act(async()=>{
     const p=decodeProject(await file.text());editor.validateSettings(p.settings);await flush();p.id=crypto.randomUUID();p.createdAt=p.updatedAt=Date.now();p.thumbnail=editor.thumbnail(p.source);await store.put(p);await open(p.id);
   });});
-  document.addEventListener('input',e=>{if(e.target.type!=='number'&&e.target.closest('#inspector,#floating-settings'))changed();});
-  document.addEventListener('change',e=>{if(e.target.closest('#inspector,#floating-settings'))changed();});
+  document.addEventListener('input',e=>{if(e.target.type!=='number'&&e.target.closest('#editor-panels'))changed();});
+  document.addEventListener('change',e=>{if(e.target.closest('#editor-panels'))changed();});
   window.addEventListener('beforeunload',e=>{if(current&&saved!==dirty){e.preventDefault();e.returnValue='';}});
   document.addEventListener('visibilitychange',()=>{if(document.hidden)flush().catch(error);});
   title();status('No project open');

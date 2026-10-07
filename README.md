@@ -113,3 +113,19 @@ The Node server is required for saving; the old `python3 -m http.server` command
 Use **Copy browser projects to repo** once in the library to copy older IndexedDB projects from the same browser profile and site address. Browser copies remain intact, and existing repo project IDs are never overwritten. Repeating the copy skips existing IDs; because browser copies remain, copying again after deleting a repo project can restore that old browser copy. Other browser profiles or site addresses require exporting/importing or running the new server at the old address.
 
 Saves write and sync a temporary file, then atomically replace the previous project. A failed save keeps the editor open and reports an error. Files currently use the portable JSON format and have a 512 MB per-project save limit; originals are never downsampled to fit. Back up `stencil-app/projects/` or export individual projects.
+
+### Unified editor (current)
+
+Prepare and Assign are independently expandable islands on the right of a single canvas. The original image is the default base; **Show quantized** in Prepare reveals the reduced-color preview. **Show boundaries** in Assign draws selectable region edges without recomputing segmentation. Hold to compare shows the original with previews and overlays temporarily hidden.
+
+N quantized colors provide N treatment choices: **Unbleached** replaces the darkest slot, followed by N−1 intensities. Three colors therefore give Unbleached, Intensity 1, and Intensity 2. Regions still start unassigned. Older saved assignments to slot 0 reopen as unbleached. A future grouping brush will assign whole regions crossed by a stroke; it is not part of this change.
+
+### Whole-region grouping brush
+
+Choose **Brush** (B), select a treatment in Assign, and drag across the artwork. The brush assigns each whole detected region touched by its circular footprint; diameter is measured in original-image pixels. Assigned and Unbleached regions are protected. Use Pick to explicitly reassign them, or Clear assignment to release them for brushing. Minimum-area-filtered regions remain unavailable until filtering is disabled. One stroke is one undo step. Escape, cancelled input, losing window focus, or starting navigation cancels the pending stroke.
+
+Unassigned pixels have a subtle dotted hint; assigned regions have treatment tint, with a separate hatch for Unbleached. Toggle **Mark unassigned pixels** to hide the hints. Clicking canvas outside the artwork deselects the current region.
+
+### Assigned group selection
+
+Clicking an assigned region highlights every region with the same treatment, including disconnected pieces. Touching regions in that treatment no longer show internal boundaries. Unassigned regions retain their own boundaries and individual selection. Reassign or **Clear group assignment** affects the whole selected treatment in one undo step. Original segmentation remains intact so undo, clearing and reopening can restore the appropriate boundaries.

@@ -69,3 +69,17 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none}body{b
 .no-project #canvas-world,.no-project .tool-island,.no-project .zoom-island,.no-project .canvas-toolbar,.no-project #inspector,.no-project #floating-settings{visibility:hidden}
 @media(max-width:600px){#project-new{font-size:11px;padding:8px}#project-library{padding:18px}.library-actions{flex-wrap:wrap}.library-actions button{flex:1;font-size:12px}#project-grid{grid-template-columns:1fr 1fr;gap:8px}.project-open img{height:100px}.project-menu{max-width:60%}}
 #project-name{display:block;width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;margin-top:8px;background:var(--panel)}
+
+/* One editor canvas with independent, compact disclosure islands on the right. */
+#editor-panels{position:fixed;z-index:15;right:20px;top:130px;width:272px;max-height:calc(100dvh - 250px);overflow:auto;overscroll-behavior:contain;display:grid;gap:10px;min-height:0;padding:0;background:none;border:0}
+.editor-island{background:#fffefaf5;border:1px solid #ffffffc0;border-radius:14px;box-shadow:0 6px 24px #20332118;overflow:hidden}
+.editor-island>summary{padding:13px 16px;min-height:46px;font-weight:600;cursor:pointer;list-style-position:inside}.island-content{padding:0 14px 14px}
+#editor-panels select,#editor-panels input[type=number]{min-height:36px;margin:5px 0 9px;padding:7px 9px;font-size:12px}#editor-panels .check{margin:6px 0;font-size:12px}#editor-panels .tool-details{margin-top:5px}#editor-panels .tool-details summary{padding:10px 0}
+#editor-panels h3{margin:12px 0 8px}#editor-panels .bucket-buttons{grid-template-columns:1fr 1fr}#editor-panels .bucket-buttons button{padding:8px;font-size:12px;gap:7px}#editor-panels .overlay-tools{margin-top:12px;padding:0;border:0;display:grid;gap:8px;background:none}#editor-panels .overlay-tools input[type=range]{width:100%;margin:0}#editor-panels .overlay-tools button{width:100%;margin:0}
+#assign-quantized,#assign-boundaries{position:absolute;left:0;top:0;pointer-events:none}.original-only #assign-quantized,.original-only #assign-boundaries{visibility:hidden}.unbleached-swatch{background:repeating-linear-gradient(135deg,#dcded9 0 4px,#fafbf7 4px 8px)!important}
+.no-project #editor-panels{visibility:hidden}.tool-island{gap:6px}
+@media(max-width:600px){#editor-panels{right:12px;top:115px;width:248px;max-height:calc(100dvh - 280px)}.brand{flex:1}.brand h1{display:block}.app-header .file-actions{margin-left:auto}}
+#assign-hints{position:absolute;left:0;top:0;pointer-events:none}.original-only #assign-hints{visibility:hidden}
+.assignment-legend{font-size:10px;color:var(--muted);line-height:1.8;display:flex;gap:5px;align-items:center;flex-wrap:wrap}.assignment-legend span{display:inline-block;width:14px;height:14px;border:1px solid #9fb1a9;border-radius:3px}.unassigned-key{background:radial-gradient(#197da5 1px,transparent 1.5px) 0 0/5px 5px}.assigned-key{background:#a9bda9}
+#brush-settings{margin:12px 0;padding:10px;border-radius:9px;background:#edf2eb}#brush-settings label{display:flex;justify-content:space-between}#brush-settings input{margin:7px 0}#brush-help,#brush-status{font-size:11px;margin:4px 0}#brush-status:empty{display:none}
+#brush-cursor{position:fixed;z-index:14;border:1px solid #fff;border-radius:50%;box-shadow:0 0 0 1px #263630;transform:translate(-50%,-50%);pointer-events:none}#canvas-viewport[data-tool=brush] #assign-outline{cursor:crosshair}

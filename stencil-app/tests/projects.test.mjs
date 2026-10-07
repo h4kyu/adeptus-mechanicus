@@ -27,7 +27,7 @@ test('non-quantized projects retain null group identities and restore without in
 });
 test('restored overrides protect segmentation without restoring old undo history',()=>{
   const p=fixture(),m=createAssignments(p.result.regions.map(r=>r.paletteIndex),p.result.palette.length);m.values.set(p.assignments);
-  assert.equal(m.edited,true);assert.equal(m.canUndo,false);m.set(0,0);assert.equal(m.canUndo,true);m.undo();assert.equal(m.values[0],-2);
+  assert.equal(m.edited,true);assert.equal(m.canUndo,false);m.set(0,1);assert.equal(m.canUndo,true);m.undo();assert.equal(m.values[0],-2);
 });
 
 test('unassigned quantized regions survive save/load alongside explicit assignments',()=>{

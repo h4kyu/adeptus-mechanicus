@@ -12,7 +12,7 @@ async function confirmReset(){
   const dialog=$('discard-dialog');if(dialog.open)return false;dialog.returnValue='cancel';
   return new Promise(resolve=>{dialog.addEventListener('close',()=>resolve(dialog.returnValue==='discard'),{once:true});dialog.showModal();});
 }
-function setStage(stage){document.body.dataset.stage=stage;for(const name of ['prepare','assign'])$('stage-'+name).setAttribute('aria-pressed',String(stage===name));$('toggle-inspector').textContent=stage==='prepare'?'⚙ Prepare':'◧ Groups';camera.refresh();projects?.changed();}
+function setStage(){document.body.dataset.stage='editor';camera.refresh();}
 const render=createRenderer();
 let preparedBase;
 let committedMinimum=20,committedCleanup=20;
@@ -39,10 +39,11 @@ function switchInspection(side) {
 
 
 function syncControls() {
+  $('min-size').disabled=!$('min-size-enabled').checked;
   const quant = $('mode').value === 'quantized';
   const gray=quant && $('color-space').value==='grayscale';
   $('group-label').textContent=gray?'Brightness groups':'Color groups';
-  $('assignment-group-title').textContent=gray?'Intensity groups':'Color groups';
+  $('assignment-group-title').textContent='Treatment groups';
   $('palette-settings').hidden=!quant;
   $('quantized-settings').hidden = !quant;
   $('color-space-settings').hidden = !quant;
@@ -85,7 +86,7 @@ function compute() {
   timer = setTimeout(() => {
     const hex = $('background').value;
     const value = $('min-size').value.trim()===''?committedMinimum:Number($('min-size').value);
-    const minSize = Math.max(1, Math.min(1000000, Number.isFinite(value) ? Math.round(value) : 1));
+    const minSize = $('min-size-enabled').checked ? Math.max(1, Math.min(1000000, Number.isFinite(value) ? Math.round(value) : 1)) : 1;
     const fail = message => {
       if (current !== revision) return;
       $('status').textContent = 'Detection failed'; $('error').textContent = message;document.dispatchEvent(new CustomEvent('segmentation-failed',{detail:message}));
@@ -144,6 +145,8 @@ function visibleRegion(id) {
 
 function draw() {
   if (!base) return;
+  $('assign-quantized').hidden=!$('show-palette').checked;
+  if($('show-palette').checked)render($('assign-quantized'),{pixels:base,base,source:source.data,segmentation:result,width:canvas.width,height:canvas.height,hidden:hiddenLayers,palette:true,edges:false});
   drawComparison();
   camera.refresh();
   if(!$('compare').checked)render(canvas,{
@@ -174,7 +177,7 @@ function drawComparison() {
 
 function scheduleDraw() { if(!drawQueued) {drawQueued=true; requestAnimationFrame(()=>{drawQueued=false;draw();});} }
 function cancelPick() {
-  picking=false; canvas.style.cursor=''; $('pick').textContent='Pick background from image'; $('pick').setAttribute('aria-pressed','false');
+  picking=false;document.body.dataset.backgroundPick='false'; canvas.style.cursor=''; $('pick').textContent='Pick background from image'; $('pick').setAttribute('aria-pressed','false');
 }
 function point(event) {
   const rect=event.currentTarget.getBoundingClientRect();
@@ -228,8 +231,8 @@ $('file').addEventListener('change',async event=>{
   catch(e) {if(request===uploadRevision)projects.report(e);}
   finally {URL.revokeObjectURL(url);}
 });
-for(const id of ['cleanup','color-space','mode','background-mode','background','tolerance','alpha','color-count','smoothing','smooth-radius','smooth-strength']) $(id).addEventListener('input',compute);
-$('outlines').addEventListener('change',draw);
+for(const id of ['min-size-enabled','cleanup','color-space','mode','background-mode','background','tolerance','alpha','color-count','smoothing','smooth-radius','smooth-strength']) $(id).addEventListener('input',compute);
+$('outlines').addEventListener('change',()=>{assignment.boundaries();draw();});
 $('show-palette').addEventListener('change',draw);
 $('compare').addEventListener('change',()=>{
   if(!$('compare').checked)switchInspection('after');draw();
@@ -246,7 +249,7 @@ $('zoom').addEventListener('change',updateZoom);
 $('demo').addEventListener('click',sample);
 $('pick').addEventListener('click',()=>{
   if(picking){cancelPick();draw();return;}
-  $('compare').checked=false; picking=true; hover=-1; canvas.style.cursor='crosshair'; $('pick').textContent='Cancel picking';$('pick').setAttribute('aria-pressed','true');
+  $('compare').checked=false; picking=true;document.body.dataset.backgroundPick='true'; hover=-1; canvas.style.cursor='crosshair'; $('pick').textContent='Cancel picking';$('pick').setAttribute('aria-pressed','true');draw();
 });
 canvas.addEventListener('pointermove',event=>{if(picking||!result)return;hoverSide='after';const id=visibleRegion(result.labels[point(event)]);if(id!==hover){hover=id;scheduleDraw();}});
 canvas.addEventListener('pointerleave',()=>{hover=-1;scheduleDraw();});
@@ -278,25 +281,26 @@ for(const [id,side] of [['original-compare','before'],['smoothed-compare','after
     renderPalette();draw();
   });
 }
+$('canvas-viewport').addEventListener('canvas-deselect',()=>{selected=hover=selectedLayer=-1;for(const state of Object.values(sideStates)){state.selected=state.selectedLayer=-1;}renderPalette();draw();});
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!document.querySelector('dialog[open]')){cancelPick();selected=hover=selectedLayer=-1;renderPalette();draw();}});
-for(const stage of ['prepare','assign'])$('stage-'+stage).addEventListener('click',()=>setStage(stage));
+
 $('reset-assignments').addEventListener('click',async()=>{if(await confirmReset())assignment.reset();});
 
 const camera=createViewport(()=>projects?.changed());
-const settingIds=['mode','color-space','color-count','cleanup','cleanup-size','smoothing','smooth-radius','smooth-strength','background-mode','background','tolerance','alpha','min-size','outlines','show-palette','compare','overlay-opacity','show-original'];
+const settingIds=['mode','color-space','color-count','cleanup','cleanup-size','smoothing','smooth-radius','smooth-strength','background-mode','background','tolerance','alpha','min-size','min-size-enabled','outlines','show-palette','compare','overlay-opacity','show-original','assignment-hints'];
 function readSettings(){return Object.fromEntries(settingIds.map(id=>[id,id==='min-size'?String(committedMinimum):id==='cleanup-size'?String(committedCleanup):$(id).type==='checkbox'?$(id).checked:$(id).value]));}
 const defaultSettings=readSettings();
 function validateSettings(settings){
-  for(const id of settingIds){const node=$(id),v=settings[id];
+  for(const id of settingIds){const node=$(id),v=['min-size-enabled','assignment-hints'].includes(id)&&settings[id]===undefined?true:settings[id];
     if(node.type==='checkbox'){if(typeof v!=='boolean')throw Error('Invalid project settings.');}
     else if(typeof v!=='string'||(node.tagName==='SELECT'&&![...node.options].some(o=>o.value===v))||(node.type==='color'&&!/^#[0-9a-f]{6}$/i.test(v))||(['number','range'].includes(node.type)&&(!v.trim()||!Number.isFinite(Number(v))||Number(v)<Number(node.min||0)||Number(v)>Number(node.max||1000000))))throw Error('Invalid project settings.');
   }
 }
 function applySettings(settings){
   validateSettings(settings);
-  for(const id of settingIds){const node=$(id);if(node.type==='checkbox')node.checked=settings[id];else node.value=settings[id];}
+  for(const id of settingIds){const node=$(id);if(node.type==='checkbox')node.checked=['min-size-enabled','assignment-hints'].includes(id)&&settings[id]===undefined?true:settings[id];else node.value=settings[id];}
   committedMinimum=Number($('min-size').value);committedCleanup=Number($('cleanup-size').value);syncControls();
-  $('overlay-opacity').dispatchEvent(new Event('input'));$('show-original').dispatchEvent(new Event('change'));
+  $('overlay-opacity').dispatchEvent(new Event('input'));$('show-original').dispatchEvent(new Event('change'));assignment.boundaries();assignment.hints();
 }
 function ready(){if(result)return Promise.resolve();if($('status').textContent==='Detection failed')return Promise.reject(Error('Fix the detection settings before saving.'));return new Promise((resolve,reject)=>{
   const clean=()=>{document.removeEventListener('segmentation-ready',ok);document.removeEventListener('segmentation-failed',fail);};
