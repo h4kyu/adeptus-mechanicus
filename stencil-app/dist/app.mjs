@@ -287,18 +287,19 @@ document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!document.q
 $('reset-assignments').addEventListener('click',async()=>{if(await confirmReset())assignment.reset();});
 
 const camera=createViewport(()=>projects?.changed());
-const settingIds=['mode','color-space','color-count','cleanup','cleanup-size','smoothing','smooth-radius','smooth-strength','background-mode','background','tolerance','alpha','min-size','min-size-enabled','outlines','show-palette','compare','overlay-opacity','show-original','assignment-hints'];
+const settingIds=['mode','color-space','color-count','cleanup','cleanup-size','smoothing','smooth-radius','smooth-strength','background-mode','background','tolerance','alpha','min-size','min-size-enabled','outlines','show-palette','compare','overlay-opacity','show-original','assignment-hints','refine-minimum','refine-scope'];
 function readSettings(){return Object.fromEntries(settingIds.map(id=>[id,id==='min-size'?String(committedMinimum):id==='cleanup-size'?String(committedCleanup):$(id).type==='checkbox'?$(id).checked:$(id).value]));}
 const defaultSettings=readSettings();
+function settingValue(settings,id){return settings[id]??({'min-size-enabled':true,'assignment-hints':true,'refine-minimum':'20','refine-scope':'unassigned'})[id];}
 function validateSettings(settings){
-  for(const id of settingIds){const node=$(id),v=['min-size-enabled','assignment-hints'].includes(id)&&settings[id]===undefined?true:settings[id];
+  for(const id of settingIds){const node=$(id),v=settingValue(settings,id);
     if(node.type==='checkbox'){if(typeof v!=='boolean')throw Error('Invalid project settings.');}
     else if(typeof v!=='string'||(node.tagName==='SELECT'&&![...node.options].some(o=>o.value===v))||(node.type==='color'&&!/^#[0-9a-f]{6}$/i.test(v))||(['number','range'].includes(node.type)&&(!v.trim()||!Number.isFinite(Number(v))||Number(v)<Number(node.min||0)||Number(v)>Number(node.max||1000000))))throw Error('Invalid project settings.');
   }
 }
 function applySettings(settings){
   validateSettings(settings);
-  for(const id of settingIds){const node=$(id);if(node.type==='checkbox')node.checked=['min-size-enabled','assignment-hints'].includes(id)&&settings[id]===undefined?true:settings[id];else node.value=settings[id];}
+  for(const id of settingIds){const node=$(id);if(node.type==='checkbox')node.checked=settingValue(settings,id);else node.value=settingValue(settings,id);}
   committedMinimum=Number($('min-size').value);committedCleanup=Number($('cleanup-size').value);syncControls();
   $('overlay-opacity').dispatchEvent(new Event('input'));$('show-original').dispatchEvent(new Event('change'));assignment.boundaries();assignment.hints();
 }

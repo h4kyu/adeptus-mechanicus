@@ -2,6 +2,16 @@
 
 Updated: 2026-10-07. This is the current direction; older README sections describe incremental experiments and may be historical.
 
+## Post-assignment cleanup — implemented
+
+- Refine now offers **Clean up assignments**: an area threshold in original-image pixels, **Unassigned leftovers only** (default), or **All small patches** (includes assigned intensities and Unbleached).
+- Find four-connected components of effective pixel treatments, including lasso overrides and opaque pixels filtered out during Prepare. Process patches strictly smaller than the threshold, smallest first. Merge into the assigned neighboring treatment with the longest total shared border; coalesce touching pieces of that treatment before evaluating subsequent sizes. Ties use a deterministic treatment order.
+- Transparent pixels are excluded and cannot connect patches. Unassigned is never a merge destination; isolated patches with no assigned neighbor remain unchanged and are reported.
+- **Preview cleanup** runs in a background worker. Tint, unassigned hints and boundaries preview the result; amber highlights changed pixels. **Show cleanup preview** compares with current assignments. Preview is transient and never saved or added to undo history. Changing settings or assignments, starting a canvas edit, Cancel, Escape or closing Refine discards it; camera navigation can preserve a finished preview.
+- **Apply cleanup** writes pixel exceptions as one undoable edit, using the existing repo autosave and portable project fields. Threshold and scope persist; older projects default to 20 pixels and unassigned-only. Original pixels and segmentation stay intact.
+- Focused validation: four cleanup tests (ownership scopes, shared-border merging, threshold/transparency, pixel edits and atomic undo); browser preview/apply/undo check. Per user request, the full suite was not rerun.
+- Agreed next sequence: post-assignment cleanup → vector tracing/boundary smoothing → bridges on each actual stencil sheet. Physical size and separate-versus-cumulative intensity sheets must be established for production geometry. Smoothing and bridging are not implemented in this slice.
+
 ## Pixel lasso — implemented, latest direction
 
 - **Lasso (L)** selects actual source-resolution pixels independently of detected regions. Drag a closed loop and release; alternatively click corners and use Enter or **Finish lasso**. Choose a treatment afterward, or **Clear assignment** to release the selected pixels. Escape, Deselect and clicking outside the image discard the selection.

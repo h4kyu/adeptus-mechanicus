@@ -2,6 +2,7 @@ import {UNASSIGNED,UNBLEACHED,treatmentGroups} from './assignments.mjs?v=palette
 import {assignmentEdges} from './assignment-geometry.mjs';
 import {createPixelAssignments} from './pixel-assignments.mjs';
 import {lassoMask} from './lasso.mjs';
+import {setupAssignmentCleanup} from './assignment-cleanup-ui.mjs';
 import {collectBrushRegions} from './group-brush.mjs';
 export function setupAssign(onChange) {
   const $=id=>document.getElementById(id), original=$('assign-original'),overlay=$('assign-overlay'),outline=$('assign-outline'),boundaries=$('assign-boundaries'),quantized=$('assign-quantized'),hints=$('assign-hints'),viewport=$('canvas-viewport'),cursor=$('brush-cursor');
@@ -10,6 +11,15 @@ export function setupAssign(onChange) {
   const lassoMode=()=>viewport.dataset.tool==='lasso';
   const palette=()=>snapshot?.result?.palette || [];
   const newModel=()=>createPixelAssignments((snapshot?.result?.regions || []).map(r=>r.paletteIndex ?? -1),palette().length,snapshot?.result?.labels,snapshot?.source?.data);
+  const cleanup=setupAssignmentCleanup({
+    read:()=>snapshot?.result&&palette().length?{width:snapshot.source.width,height:snapshot.source.height,source:snapshot.source.data,at:model.at}:null,
+    repaint:()=>{displayEdges=null;paintOverlay();paintHints();paintBoundaries();paintSelection();},
+    beforePreview:()=>{cancelStroke();deselect();$('tool-select').click();if($('pick').getAttribute('aria-pressed')==='true')$('pick').click();$('compare').checked=false;$('compare').dispatchEvent(new Event('change'));},
+    apply:labels=>{cancelStroke();deselect();if(model.assignPixels(labels))changed();}
+  });
+  const displayAt=i=>cleanup.labels?cleanup.labels[i]:model.at(i);
+  // Starting a canvas edit discards a stale preview; camera navigation preserves it.
+  outline.addEventListener('pointerdown',()=>{if(cleanup.active)cleanup.clear();});
   function buildBuckets() {
     $('assignment-groups').replaceChildren();
     if(!palette().length||brushTarget>=palette().length)brushTarget=palette().length>1?1:UNBLEACHED;
@@ -22,7 +32,7 @@ export function setupAssign(onChange) {
   }
   const grouped=()=>!individual&&selectedTreatment!==null&&selectedTreatment!==UNASSIGNED;
   const includes=i=>mask?!!mask[i]:grouped()?model.at(i)===selectedTreatment:selected>=0&&snapshot.result.labels[i]===selected&&(individual||model.at(i)===UNASSIGNED);
-  function edges(){return displayEdges??=assignmentEdges(snapshot.result.labels,model.values,outline.width,outline.height,snapshot.source.data,model.overrides);}
+  function edges(){return displayEdges??=assignmentEdges(snapshot.result.labels,model.values,outline.width,outline.height,snapshot.source.data,cleanup.labels||model.overrides);}
   function controls() {
     const r=snapshot?.result?.regions[selected],value=selectedTreatment,editable=palette().length>0&&(grouped()||!!r&&model.automatic[selected]>=0);
     const treatment=value===UNBLEACHED?'Unbleached':`Intensity ${value}`;
@@ -35,7 +45,7 @@ export function setupAssign(onChange) {
     $('unbleach-group').textContent=individual?'Make region unbleached':'Make group unbleached';
     $('unbleach-group').disabled=!!mask||lassoMode()||!editable||value<0;
     $('assign-count').textContent=snapshot?.result?`${assigned.toLocaleString()} pixels assigned`:'Computing…';
-    $('reset-assignments').hidden=!model.edited;
+    $('reset-assignments').hidden=!model.edited;cleanup.controls();
   }
   function paintOverlay() {
     const ctx=overlay.getContext('2d');ctx.clearRect(0,0,overlay.width,overlay.height);
@@ -43,7 +53,7 @@ export function setupAssign(onChange) {
     const {result,source}=snapshot,data=ctx.createImageData(overlay.width,overlay.height);
     for(let i=0;i<result.labels.length;i++) {
       const id=result.labels[i];if(!source.data[i*4+3])continue;
-      const bucket=stroke?.ids.has(id)&&model.at(i)===UNASSIGNED?stroke.target:model.at(i);if(bucket===-1)continue;
+      const bucket=stroke?.ids.has(id)&&model.at(i)===UNASSIGNED?stroke.target:displayAt(i);if(bucket===-1)continue;
       // A subtle hatch distinguishes unbleached from a naturally black group.
       const hatch=((i%overlay.width)+Math.floor(i/overlay.width))%12<2;
       const color=bucket===UNBLEACHED?(hatch?[95,125,145]:[12,16,20]):palette()[bucket];
@@ -58,7 +68,7 @@ export function setupAssign(onChange) {
     const data=ctx.createImageData(hints.width,hints.height);
     for(let y=0;y<hints.height;y++)for(let x=0;x<hints.width;x++){
       const i=y*hints.width+x,id=snapshot.result.labels[i];
-      if(!snapshot.source.data[i*4+3]||(model.at(i)!==UNASSIGNED||stroke?.ids.has(id)))continue;
+      if(!snapshot.source.data[i*4+3]||(displayAt(i)!==UNASSIGNED||stroke?.ids.has(id)))continue;
       // Small contrasting dots stay distinct from assigned tints and unbleached hatching.
       if(x%10<2&&y%10<2)data.data.set([25,125,165,190],i*4);
       else if(x%10<3&&y%10<3)data.data.set([255,255,255,180],i*4);
@@ -103,9 +113,9 @@ export function setupAssign(onChange) {
   function paintSelection() {
     const ctx=outline.getContext('2d');ctx.clearRect(0,0,outline.width,outline.height);
     if(!snapshot?.result)return;
-    if(mask||selected>=0||grouped()){
+    if(cleanup.labels||mask||selected>=0||grouped()){
       const data=ctx.createImageData(outline.width,outline.height),merged=individual?snapshot.result.edges:edges(),w=outline.width;
-      for(let i=0;i<snapshot.result.labels.length;i++)if(includes(i)&&snapshot.source.data[i*4+3]){
+      for(let i=0;i<snapshot.result.labels.length;i++)if((cleanup.labels?cleanup.labels[i]!==model.at(i):includes(i))&&snapshot.source.data[i*4+3]){
         const edge=mask?(i%w===0||i%w===w-1||!mask[i-1]||!mask[i+1]||!mask[i-w]||!mask[i+w]):merged[i];
         data.data.set([255,190,40,edge?255:55],i*4);
       }
@@ -118,7 +128,7 @@ export function setupAssign(onChange) {
     }
   }
   function changed(){
-    displayEdges=null;available=new Uint8Array(model.values.length);
+    cleanup.clear();displayEdges=null;available=new Uint8Array(model.values.length);
     if(snapshot?.result)for(let i=0;i<snapshot.result.labels.length;i++)if(model.at(i)===UNASSIGNED&&snapshot.source.data[i*4+3]&&snapshot.result.labels[i]>=0)available[snapshot.result.labels[i]]=1;
     paintOverlay();paintHints();paintBoundaries();paintSelection();controls();onChange(model.edited);
   }
@@ -195,7 +205,7 @@ export function setupAssign(onChange) {
     if(document.querySelector('dialog[open]')||/INPUT|SELECT|TEXTAREA/.test(event.target.tagName))return;
     if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='z'){event.preventDefault();history(event.shiftKey);}
     if(event.key==='Enter'&&lassoMode()&&lasso){event.preventDefault();finishLasso();}
-    if(event.key==='Escape'){cancelStroke();deselect();showOriginal(false);}
+    if(event.key==='Escape'){cleanup.clear();cancelStroke();deselect();showOriginal(false);}
   });
   return {
     boundaries:paintBoundaries,

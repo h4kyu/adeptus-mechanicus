@@ -38,6 +38,11 @@ export function createPixelAssignments(initial=[],paletteCount=0,labels=new Int3
     assignMask(mask,to){to=normalize(to);if(!valid(to)||mask.length!==labels.length)return false;
       return commit(values,i=>mask[i]&&source[i*4+3]?(to===inherited(i)?INHERIT:to):overrides[i]);
     },
+    assignPixels(treatments){
+      if(!(treatments instanceof Int16Array)||treatments.length!==labels.length)return false;
+      for(let i=0;i<labels.length;i++)if(source[i*4+3]&&!valid(treatments[i]))return false;
+      return commit(values,i=>source[i*4+3]?(treatments[i]===inherited(i)?INHERIT:treatments[i]):overrides[i]);
+    },
     brush(ids,to){return setMany(ids,to,{protect:true});},
     undo(){const e=past.pop();if(!e)return false;apply(e,false);future.push(e);return true;},
     redo(){const e=future.pop();if(!e)return false;apply(e,true);past.push(e);return true;},

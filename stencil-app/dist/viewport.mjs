@@ -82,7 +82,7 @@ export function createViewport(onChange=()=>{}) {
     if(e.key.toLowerCase()==='l')chooseTool('lasso');
     if(e.key.toLowerCase()==='b')chooseTool('brush');
     if(e.key.toLowerCase()==='h')chooseTool('pan');
-    if(e.key==='Escape')for(const id of ['prepare-island','assign-island'])$(id).open=false;
+    if(e.key==='Escape')for(const id of ['prepare-island','assign-island','refine-island'])$(id).open=false;
   });
   document.addEventListener('keyup',e=>{if(e.code==='Space'){space=false;toolState();}});
   window.addEventListener('blur',()=>{space=false;pointers.clear();gesture=false;nativePinch=false;toolState();});

@@ -21,3 +21,6 @@
 - Assigned regions behave as treatment unions: clicking one highlights all regions with its treatment, same-treatment internal boundaries disappear, and explicit reassignment/clear applies to the whole selected treatment. Keep original segmentation for undo; unassigned regions remain separate.
 
 - Pixel lasso edits use per-pixel exceptions over original region assignments, persisted in project files and sharing undo history with region edits. Treatment unions and display boundaries use effective pixel assignments. Double-click isolates an original region for explicit reassignment.
+
+- Refine includes post-assignment cleanup with threshold, unassigned-only/all-patches scopes, worker preview and atomic undoable Apply. It uses effective pixel treatments, preserves transparency, and merges only into assigned neighbors. Next planned work is boundary smoothing followed by per-sheet bridging; these are not implemented yet.
+- Keep verification focused on newly changed features; the user explicitly wants to avoid unnecessary full-suite testing and usage.
