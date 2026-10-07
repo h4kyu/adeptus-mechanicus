@@ -36,3 +36,11 @@ test('unassigned quantized regions survive save/load alongside explicit assignme
  m.values.fill(-1);assert.equal(m.edited,false);
  m.values[0]=m.automatic[0];assert.equal(m.edited,true);
 });
+
+test('pixel exceptions round trip alongside old projects and reject invalid maps',()=>{
+ const p=fixture();p.pixelAssignments=new Int16Array([1,-2,-3,-1,-3,-3]);
+ assert.deepEqual(decodeProject(encodeProject(p)),p);
+ for(const change of [p=>p.pixelAssignments=new Int16Array(2),p=>p.pixelAssignments[0]=7,p=>p.pixelAssignments[0]=-4,p=>p.pixelAssignments[2]=1]){
+   const invalid=structuredClone(p);change(invalid);assert.throws(()=>validateProject(invalid));
+ }
+});

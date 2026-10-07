@@ -7,14 +7,16 @@ export function selectionRegions(values,selected,individual=false){
   const ids=[];for(let id=0;id<values.length;id++)if(values[id]===treatment)ids.push(id);
   return ids;
 }
-export function assignmentEdges(labels,values,width,height,source){
+export function assignmentEdges(labels,values,width,height,source,overrides){
   const edges=new Uint8Array(labels.length);
+  const at=i=>overrides&&overrides[i]!==-3?overrides[i]:labels[i]>=0?values[labels[i]]:UNASSIGNED;
+  const visible=i=>source[i*4+3]&&(labels[i]>=0||at(i)!==UNASSIGNED);
   const same=(i,j)=>{
-    if(j<0||j>=labels.length||!source[j*4+3]||labels[j]<0)return false;
-    const a=labels[i],b=labels[j];return a===b||(values[a]!==UNASSIGNED&&values[a]===values[b]);
+    if(j<0||j>=labels.length||!visible(j))return false;
+    const a=labels[i],b=labels[j];return at(i)===at(j)&&(at(i)!==UNASSIGNED||a===b);
   };
   for(let i=0;i<labels.length;i++){
-    if(labels[i]<0||!source[i*4+3])continue;
+    if(!visible(i))continue;
     const x=i%width,y=Math.floor(i/width);
     edges[i]=Number(x===0||y===0||x===width-1||y===height-1||!same(i,i-1)||!same(i,i+1)||!same(i,i-width)||!same(i,i+width));
   }

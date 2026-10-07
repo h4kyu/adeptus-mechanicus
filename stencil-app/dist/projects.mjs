@@ -37,6 +37,12 @@ export function validateProject(p) {
   for(const key of ['prepared','smoothed'])if(p.result[key]!=null&&(!(p.result[key] instanceof Uint8ClampedArray)||p.result[key].length!==n*4))fail();
   if(!(p.assignments instanceof Int16Array)||p.assignments.length!==p.result.regions.length)fail();
   p.assignments.forEach((v,i)=>{const automatic=p.result.regions[i].paletteIndex??-1;if(!Number.isInteger(v)||(automatic<0?v!==automatic:v!==-2&&v!==-1&&(v<0||v>=(p.result.palette?.length||0))))fail();});
+  // Optional full-resolution exceptions extend v1 without changing existing files.
+  if(p.pixelAssignments!=null){
+    if(!(p.pixelAssignments instanceof Int16Array)||p.pixelAssignments.length!==n)fail();
+    const count=p.result.palette?.length||0;
+    for(let i=0;i<n;i++){const v=p.pixelAssignments[i];if(v===-3)continue;if(!count||!s.data[i*4+3]||!(v===-2||v===-1||v>0&&v<count))fail();}
+  }
   const c=p.view.camera;if(c&&(!Number.isFinite(c.x)||!Number.isFinite(c.y)||!Number.isFinite(c.scale)||c.scale<=0||c.scale>32))fail();
   return p;
 }

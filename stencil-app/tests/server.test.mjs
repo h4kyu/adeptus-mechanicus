@@ -9,7 +9,7 @@ import {encodeProject,decodeProject} from '../dist/projects.mjs';
 const fixture=(id='one')=>({format:'stencil-studio',version:1,id,name:'Test artwork',createdAt:1,updatedAt:2,source:{width:1,height:1,data:new Uint8ClampedArray([10,20,30,128])},result:{labels:new Int32Array([0]),edges:new Uint8Array([1]),regions:[{id:0,area:1,bounds:[0,0,0,0],paletteIndex:0}],ignoredPixels:0,palette:[[10,20,30]],colorLabels:new Int16Array([0])},assignments:new Int16Array([-2]),settings:{},view:{}});
 async function directory(t){const dir=await mkdtemp(path.join(tmpdir(),'stencil-store-'));t.after(()=>rm(dir,{recursive:true,force:true}));return dir;}
 test('disk projects survive store restart and rename without losing pixels or assignments',async t=>{
-  const dir=await directory(t),store=createDiskStore(dir),p=fixture();await store.put(p.id,encodeProject(p));
+  const dir=await directory(t),store=createDiskStore(dir),p=fixture();p.pixelAssignments=new Int16Array([-1]);await store.put(p.id,encodeProject(p));
   assert.deepEqual(decodeProject(await readFile(path.join(dir,'one.stencil.json'),'utf8')),p);
   const reopened=createDiskStore(dir);assert.deepEqual(decodeProject(await reopened.get('one')),p);
   p.name='Renamed';p.updatedAt=3;await reopened.put(p.id,encodeProject(p));assert.equal((await reopened.list())[0].name,'Renamed');

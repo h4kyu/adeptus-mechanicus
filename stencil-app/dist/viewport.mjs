@@ -59,16 +59,16 @@ export function createViewport(onChange=()=>{}) {
   // Safari exposes trackpad pinch through GestureEvent instead of Ctrl+wheel.
   viewport.addEventListener('gesturestart',e=>{
     e.preventDefault();if(performance.now()-lastTouch<800)return;
-    nativePinch=true;lastPinchScale=e.scale || 1;
+    viewport.dispatchEvent(new Event('canvas-navigation'));nativePinch=true;lastPinchScale=e.scale || 1;
   },{passive:false});
   viewport.addEventListener('gesturechange',e=>{
     e.preventDefault();if(!nativePinch || performance.now()-lastTouch<800)return;
     const p=local(e);zoom(e.scale/lastPinchScale,Number.isFinite(p.x)?p.x:viewport.clientWidth/2,Number.isFinite(p.y)?p.y:viewport.clientHeight/2);lastPinchScale=e.scale;
   },{passive:false});
   viewport.addEventListener('gestureend',e=>{e.preventDefault();nativePinch=false;},{passive:false});
-  function toolState(){const effective=space?'pan':mode;if(viewport.dataset.tool!==effective)viewport.dispatchEvent(new Event('canvas-navigation'));viewport.dataset.tool=effective;for(const name of ['select','brush','pan'])$('tool-'+name).setAttribute('aria-pressed',String(name===effective));viewport.dispatchEvent(new Event('canvas-tool-change'));}
-  function chooseTool(name){mode=name;if(name==='brush'){$('assign-island').open=true;$('compare').checked=false;$('compare').dispatchEvent(new Event('change'));}toolState();}
-  for(const name of ['select','brush','pan'])$('tool-'+name).addEventListener('click',()=>chooseTool(name));
+  function toolState(){const effective=space?'pan':mode;if(viewport.dataset.tool!==effective)viewport.dispatchEvent(new Event('canvas-navigation'));viewport.dataset.tool=effective;for(const name of ['select','lasso','brush','pan'])$('tool-'+name).setAttribute('aria-pressed',String(name===effective));viewport.dispatchEvent(new Event('canvas-tool-change'));}
+  function chooseTool(name){mode=name;if(name==='brush'||name==='lasso'){$('assign-island').open=true;$('compare').checked=false;$('compare').dispatchEvent(new Event('change'));}toolState();}
+  for(const name of ['select','lasso','brush','pan'])$('tool-'+name).addEventListener('click',()=>chooseTool(name));
   $('camera-slider').addEventListener('input',()=>zoom(2**Number($('camera-slider').value)/camera.scale));
   $('camera-fit').addEventListener('click',fit);$('camera-in').addEventListener('click',()=>zoom(1.25));$('camera-out').addEventListener('click',()=>zoom(.8));
   document.addEventListener('keydown',e=>{
@@ -79,6 +79,7 @@ export function createViewport(onChange=()=>{}) {
       space=true;e.preventDefault();toolState();
     }
     if(e.key.toLowerCase()==='v')chooseTool('select');
+    if(e.key.toLowerCase()==='l')chooseTool('lasso');
     if(e.key.toLowerCase()==='b')chooseTool('brush');
     if(e.key.toLowerCase()==='h')chooseTool('pan');
     if(e.key==='Escape')for(const id of ['prepare-island','assign-island'])$(id).open=false;

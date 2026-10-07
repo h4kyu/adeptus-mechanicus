@@ -33,3 +33,10 @@ test('individual selection temporarily isolates one member without changing grou
  m.setMany(selectionRegions(m.values,1,true),-1);assert.deepEqual([...m.values],[1,-1,1]);
  m.undo();assert.deepEqual(selectionRegions(m.values,1),[0,1,2]);
 });
+
+test('pixel exceptions merge into treatment boundaries across original and filtered regions',()=>{
+ const labels=Int32Array.from([0,0,0,0,-1,0,0,0,0]),overrides=new Int16Array(9).fill(-3),source=pixels(9);
+ overrides[4]=1;assert.equal(assignmentEdges(labels,[1],3,3,source,overrides)[4],0);
+ overrides[4]=2;assert.equal(assignmentEdges(labels,[1],3,3,source,overrides)[4],1);
+ overrides[4]=-1;assert.equal(assignmentEdges(labels,[1],3,3,source,overrides)[4],0);
+});

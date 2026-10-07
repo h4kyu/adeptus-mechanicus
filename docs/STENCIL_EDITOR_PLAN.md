@@ -1,13 +1,22 @@
 # Stencil editor plan and project memory
 
-Updated: 2026-10-06. This is the current direction; older README sections describe incremental experiments and may be historical.
+Updated: 2026-10-07. This is the current direction; older README sections describe incremental experiments and may be historical.
+
+## Pixel lasso — implemented, latest direction
+
+- **Lasso (L)** selects actual source-resolution pixels independently of detected regions. Drag a closed loop and release; alternatively click corners and use Enter or **Finish lasso**. Choose a treatment afterward, or **Clear assignment** to release the selected pixels. Escape, Deselect and clicking outside the image discard the selection.
+- Latest user correction: **include already-assigned pixels**, including Unbleached. Assigning a lasso deliberately reassigns all opaque pixels inside it. This supersedes the earlier protection rule for lasso only. Transparent pixels stay untouched; opaque pixels excluded by segmentation's minimum-area filter can be assigned.
+- The path uses an even/odd scanline fill at pixel centers, supporting concave paths without resizing the image. Region defaults plus per-pixel exceptions preserve the original source and segmentation. Each applied selection is one undo step shared with region and brush history.
+- Pick, treatment unions, tint, unassigned hints and merged boundaries use the effective pixel treatment. Double-click still explicitly reassigns the entire original region. The whole-region brush continues to fill only remaining unassigned pixels, preserving pixel exceptions.
+- Pixel exceptions autosave in the optional typed-array `pixelAssignments` field in portable v1 project files; older projects need no conversion. Reopening preserves exceptions and starts fresh undo history. Use the current editor for projects containing lasso edits.
+- Navigation, pointer cancellation and window blur cancel an unfinished path. A finished selection can be inspected while panning/zooming. Pixel brush and boundary refinement remain deferred.
 
 ## Assigned treatment unions — latest direction
 
 - **Double-click** a region to temporarily select just that original region inside an assigned treatment. Show its individual outline and an **Individual region** label; reassign, clear, or mark unbleached affects only that region. Selection alone does not alter ownership. A normal click, deselection, brush activation or reopening exits individual mode.
 - Clicking an assigned region selects and highlights **all regions with that treatment**, including disconnected pieces and Unbleached. Unassigned regions remain individually selectable. Clicking another member of the selected treatment toggles that group selection off.
 - Display boundaries are derived from current assignments: touching regions with the same assigned treatment have no internal seam. Distinct unassigned regions, different treatments, transparent holes and filtered gaps retain boundaries. Selection outlines use the same derived union.
-- Reassigning or clearing a selected treatment operates on all its member regions as one undoable action. The inspector reports treatment, region count and combined area; clearing is labelled **Clear group assignment**.
+- Reassigning or clearing a selected treatment operates on all its member regions as one undoable action. The inspector identifies the selected treatment; clearing is labelled **Clear group assignment**.
 - Original segmentation labels remain intact under this logical union. Assignment, brush completion, undo/redo, clear/reset and project reopen regenerate visible boundaries, preserving reversible edits and full-resolution source pixels.
 
 ## Grouping brush and assignment feedback — implemented
@@ -24,13 +33,13 @@ Updated: 2026-10-06. This is the current direction; older README sections descri
 - Prepare and Assign share one original-resolution editing canvas. They are compact, independently expandable floating islands on the right, no longer header stages. Optional before/after comparison remains an inspection view.
 - The original image is the default base. Prepare offers **Show quantized** for the reduced-color preview; Assign offers **Show boundaries** for all selectable region outlines. Both toggles affect rendering only. Boundaries default off, and selecting a region still highlights its outline. Hold to compare temporarily shows the untouched original.
 - The darkest quantization slot is the **Unbleached** treatment; remaining slots are **Intensity 1**, **Intensity 2**, etc. Three quantized colors mean exactly one unbleached plus two intensity choices. Unassigned remains separate, and new regions still begin unassigned. Legacy assignments to palette slot 0 are interpreted as unbleached when reopened.
-- The whole-region **grouping brush** is now implemented as described above. Pixel-level lasso/brush overrides and boundary editing remain later steps.
+- The whole-region **grouping brush** is now implemented as described above. Pixel lasso overrides are implemented; pixel-level brush and boundary editing remain later steps.
 
 ## Assignment ownership — latest direction
 
 - New segmentation starts with every region unassigned, even when its automatic quantization group is known. Automatic groups provide palette choices and region geometry, not manual ownership. The Assign overlay colors only explicitly assigned regions.
-- Assign to a group or mark explicitly unbleached; Clear assignment releases the region. Count explicitly assigned regions, including those assigned to their original computed group. Undo/redo and project persistence preserve unassigned status. Existing saved projects retain their saved assignments; Reset assignments clears them.
-- Future lasso/brush tools must exclude already-assigned pixels by default, including explicitly unbleached pixels. Explicit reassignment remains possible; no implicit reassignment through overlapping selections.
+- Assign to a group or mark explicitly unbleached; Clear assignment releases the region. Count explicitly assigned pixels, including those assigned to their original computed group. Undo/redo and project persistence preserve unassigned status. Existing saved projects retain their saved assignments; Reset assignments clears them.
+- The grouping brush excludes assigned pixels, including explicitly unbleached pixels. Lasso includes assigned pixels for deliberate reassignment, per the latest user correction.
 
 ## Repo storage — latest direction
 
@@ -118,7 +127,7 @@ Acceptance: changing a selected region's bucket changes only its intended treatm
 
 ### 2. Pixel selection overrides
 
-Lasso and brush select pixels independently of detected regions. By default, exclude pixels already assigned to any group or explicitly unbleached; a broad selection must never implicitly move them into another group. Reassignment requires an explicit action (or clearing their assignment first). This lets users build groups from the remaining unassigned pixels, joining a silhouette even if texture produced many automatic fragments. Include undo/redo and non-destructive source handling. These tools remain deferred.
+Pixel lasso is implemented as described above, including deliberate reassignment of existing treatments. A pixel-level brush remains deferred; the current brush assigns whole original regions while protecting already-assigned pixels. Keep undo/redo and non-destructive source handling.
 
 ### 3. Boundary refinement
 
@@ -144,4 +153,4 @@ The iPad model, iPadOS version and Apple Pencil availability are still unknown. 
 
 ## Next recommended action
 
-Review the project library and autosave with real artwork, including backup export/import on the intended browser. Then proceed to lasso/brush pixel overrides and boundary editing in small stages. The dedicated layers menu is recorded above as a separate TODO. Preserve the fixed, no-scroll viewport, floating controls and original-resolution translucent overlay. Actual iPad/Pencil testing remains outstanding. Do not treat this roadmap as authorization to implement every stage at once.
+Review the project library and autosave with real artwork, including backup export/import on the intended browser. Review lasso on real artwork, then consider pixel brush and boundary editing in small stages. The dedicated layers menu is recorded above as a separate TODO. Preserve the fixed, no-scroll viewport, floating controls and original-resolution translucent overlay. Actual iPad/Pencil testing remains outstanding. Do not treat this roadmap as authorization to implement every stage at once.
