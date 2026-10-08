@@ -2,6 +2,35 @@
 
 Updated: 2026-10-08. This is the current direction; older README sections describe incremental experiments and may be historical.
 
+## Separate stencil sheets and editable bridges — implemented
+
+- One independent sheet per positive intensity; Unbleached has no cut sheet. By default only the active intensity is cut out. Per-sheet Layer overlap can include additional intensity regions (see below). Other assignments, unassigned pixels and transparent source areas are retained sheet material. Unassigned counts remain visible instead of silently assigning them.
+- **Stencil & bridges → Finished size** controls the artwork's longest edge in inches (default 15; supports 10–20 and beyond) with locked image aspect ratio. A configurable surrounding margin defaults to 12.7 mm / half an inch. Both artwork and total sheet dimensions are shown. Bridge widths are in millimeters, default 3 mm, and retain their physical width when artwork size changes.
+- A worker derives the active cut path from the saved smoothing recipe, or exact pixel boundaries when none is saved. Curves are rasterized at original image resolution for four-connected retained-material analysis. Retained components touching the image boundary connect to the surrounding frame; other components are highlighted as islands. Connectivity checks are resolution-limited, not manufacturing certification.
+- **Bridge (G)** plus **Add bridge** enters continuous drawing mode: each drag adds a retained-material strip across an opening as one undo step. **Stop drawing bridges**, Escape, selecting an existing bridge from the list, or switching tools exits drawing mode. Select a bridge and drag its endpoints or body; change width, disable/re-enable, delete, and use separate **Undo bridge / Redo bridge** controls (or Cmd/Ctrl Z in Bridge mode). A cancelled pointer gesture restores the prior bridge. Endpoint anchoring, crossing an opening and staying on the sheet are checked.
+- **Reset bridges on this sheet** removes all active-sheet bridges (including disabled ones) as one undoable edit and cancels an in-flight automatic pass. Other sheets and width settings stay intact; assignments are unchanged.
+- Assignment tools remain available throughout bridging. **Next island** focuses a remaining disconnected component, and **Assign island to active intensity** removes that unwanted retained detail as one ordinary assignment undo step. Assignment edits and changes to smoothing/size preserve bridges, invalidate analysis and mark affected geometry for review. Mark reviewed or editing a bridge clears its review flag, but geometric problems still appear.
+- **Layers** supplies visibility controls for intensity treatments, Unbleached and unassigned hints, plus the source-image toggle, Solo active and Show all. Selecting an intensity activates its sheet. Other visible treatments appear faintly as context in the sheet preview; hiding the active intensity exits sheet preview. Visibility never changes ownership or the sheet's cut definition.
+- The portable `stencilPlan` stores physical dimensions, active layer, visibility and editable per-layer bridges with review flags. Older projects default to a fresh plan. Restore regenerates geometry; worker results from stale edits are discarded. Bridge history starts fresh on reopen, independently of assignment history.
+- Feature-focused checks cover retained islands, bridges, curved holes, physical scaling, bridge history and project round trips. Browser checks used an isolated ring fixture for add/move/resize/delete/undo, save/reopen and island reassignment with assignment undo. Automatic bridges are implemented below; cutter-ready SVG export remains deferred; previews are not exported as masking-based cut files.
+
+## Selective sheet overlap — implemented
+
+- **Stencil & bridges → Layer overlap** lets each sheet also cut any chosen positive intensity regions. This is independent overlap for simpler stencil geometry, not a calculated cumulative bleach/intensity workflow. Application order and bleach strengths remain the user's choice.
+- Example: background sheet 1 can cut treatments 1+3 while highlight sheet 3 still cuts only treatment 3. Any subset/pair/group is supported. Inclusion is direct, not transitive: sheet 1 including treatment 2 never inherits sheet 2's inclusion choices. Unbleached/unassigned/transparent areas are not selectable overlap targets.
+- Merge memberships before tracing the sheet boundary, then apply the saved smoothing recipe to the union. Internal cut seams disappear; island detection and automatic/manual bridging all use the combined opening geometry. Original assignments and original treatment preview paths remain intact. Geometry is cached by included set and invalidated on assignment/smoothing changes.
+- Changing overlap flags only that sheet's existing bridges for review, keeps them editable, and cancels stale worker results. **Use only this intensity** returns the active sheet to separate mode. Active-sheet labels list added intensities; Solo active shows all included treatments. Visibility never changes sheet membership.
+- Optional `stencilPlan.sheetIncludes` stores per-sheet membership in project saves/exports. Legacy projects remain separate by default. Focused tests cover geometry union, reduced islands, independent/non-transitive membership, smoothing/transparency, caching and persistence/validation. Browser verification covered a ring plus highlight, eliminating its island and switching back to an unchanged highlight sheet.
+
+## Automatic bridges — implemented
+
+- Single-pixel retained islands are ignored in highlights, navigation and automatic bridging. They are counted separately in status; assignments and cut geometry are unchanged.
+- **Auto bridge** works on the active sheet and preserves existing bridges. It adds an editable batch as one bridge undo step, using separate configurable **Auto minimum / maximum width** limits (default **1.5–2 mm**). Limits persist per project; older projects receive these defaults. Existing bridges are preserved, and manual width editing stays independent. Generated bridges save through the existing project format.
+- A multi-source raster wavefront finds nearby retained-component pairs, including the surrounding frame. Each candidate is a straight capsule; width is capped by the island's bounding short dimension and local thickness perpendicular to the bridge. Width is not arbitrarily reduced to lower the area score.
+- Sort candidate connections by approximate strip area (length × width), then choose a minimum spanning forest and keep only networks reaching the frame. This is a practical nearby-candidate heuristic, not a global geometric optimum. Islands can support neighboring islands; extra reinforcement is left to manual editing.
+- Four-connected capsule checks reject connections too thin to be represented reliably at native resolution. No suggestion is below the configured minimum or above the configured maximum. If local island thickness cannot accommodate the minimum, skip that connection rather than making an undersized bridge. Suggestions below 2 mm are called out for strength review; unconnected islands remain highlighted for manual work. Worker cancellation/generation guards prevent stale results from overwriting subsequent edits.
+- Focused tests cover ignored specks, short ring bridges, width caps, island networks, preserving existing bridges, frame anchoring, batch undo, minimum/maximum enforcement and legacy plan validation. Browser check covers generation, ignored speck reporting and undo/editing.
+
 ## Vector boundary smoothing — implemented
 
 - Refine now has collapsible **Clean up assignments** and **Smooth boundaries** sections. Build a preview using **Maximum deviation** (0–8 original-image pixels) and **Preserve sharp corners**. Zero traces the exact pixel geometry.
@@ -10,7 +39,7 @@ Updated: 2026-10-08. This is the current direction; older README sections descri
 - **Keep smoothing** saves an optional `boundaryRefinement` recipe in the portable project. Reopening regenerates curves from the saved assignments, without altering the raster source, segmentation or assignment undo history. **Remove smoothing** clears this independent output operation. Assignment edits invalidate displayed geometry and prompt a rebuild; the saved recipe remains reusable.
 - Six feature-focused tests cover simplification/corners, shared-boundary coverage, holes/disconnected pieces/transparency, zero tolerance, recipe persistence and adaptive 5 px retry on a narrow jagged strip while preserving an unrelated boundary. Browser verification covered build, save and restored SVG display; the full suite was not rerun.
 - The preview reports how many boundaries needed reduced deviation and the smallest value used, separately from any boundaries that still required exact geometry. Rebuild existing previews to use the adaptive algorithm; saved recipes need no migration.
-- This is image-coordinate vector refinement. Physical dimensions, minimum cut widths, per-sheet composition, bridges and production SVG export remain next steps. Crossing checks are not a substitute for later physical cut validation.
+- This is image-coordinate vector refinement. Physical dimensions, separate-sheet composition and editable bridges are implemented above; minimum cut-width validation and production SVG export remain next steps. Crossing checks are not a substitute for later physical cut validation.
 
 ## Post-assignment cleanup — implemented
 
@@ -76,9 +105,9 @@ Updated: 2026-10-08. This is the current direction; older README sections descri
 - Versioned `.stencil.json` export/import provides portable backups. Import validates pixel arrays, region maps, palette assignments and settings, and creates a separate project rather than replacing an existing ID. No cross-device sync; projects live on disk and survive clearing browser data. Git does not back up the ignored folder. A storage failure keeps the open project available, displays an error and allows export/retry.
 - Checks: unit coverage for lossless project round trips, malformed data and restored-assignment protection; isolated browser checks for the legacy store, plus disk and HTTP tests for create/list/reopen/rename/delete, migration, failed-save preservation and access boundaries. UI checks covered sample creation, renaming, reload/reopen, restored unbleached assignment, and importing a complete project. Native backup download completion and actual iPad testing still need device verification.
 
-## TODO — layers menu
+## Layers menu — implemented
 
-- [ ] Add a dedicated layers menu with toggleable visibility. Keep it compact and consistent with the floating tools. This is a future UI task; do not implement it as part of project persistence.
+- [x] Compact Layers island with treatment/source visibility, active intensity selection, Solo active and Show all; see the stencil-sheet section above.
 
 ## Canvas interaction update — latest user direction
 

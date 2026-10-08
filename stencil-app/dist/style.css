@@ -87,3 +87,7 @@ html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none}body{b
 #canvas-viewport[data-tool=lasso] #assign-outline{cursor:crosshair}
 
 #assign-vectors{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:hidden}#assign-vectors[hidden]{display:none}.vector-preview #assign-overlay,.vector-preview #assign-hints,.vector-preview #assign-boundaries{visibility:hidden}.vector-preview #assign-outline{opacity:0}.original-only #assign-vectors{visibility:hidden}#boundary-tolerance{width:100%}
+
+#assign-stencil{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}#assign-stencil[hidden]{display:none}#assign-islands{position:absolute;left:0;top:0;pointer-events:none}.sheet-preview #assign-overlay,.sheet-preview #assign-hints,.sheet-preview #assign-boundaries,.sheet-preview #assign-vectors{visibility:hidden}.original-only #assign-stencil,.original-only #assign-islands{visibility:hidden}.stencil-layer{display:flex;align-items:center;gap:8px}.stencil-layer label{margin:0}.stencil-layer button{flex:1;text-align:left;border:0;background:none;min-height:36px}.stencil-layer button[aria-pressed=true],.bridge-list button[aria-pressed=true]{background:#dfece3;border-color:#28755a}.bridge-list{display:grid;gap:4px;max-height:160px;overflow:auto}.bridge-list button{min-height:34px;font-size:12px;text-align:left}#canvas-viewport[data-tool=bridge] #assign-outline{cursor:crosshair}#bridge-add[aria-pressed=true]{background:#dfece3}
+
+#canvas-viewport[data-tool=bridge] #assign-stencil{pointer-events:auto}

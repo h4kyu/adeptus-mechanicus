@@ -4,6 +4,7 @@ import {createPixelAssignments} from './pixel-assignments.mjs';
 import {lassoMask} from './lasso.mjs';
 import {setupBoundaryRefinement} from './boundary-ui.mjs';
 import {setupAssignmentCleanup} from './assignment-cleanup-ui.mjs';
+import {setupStencil} from './stencil-ui.mjs';
 import {collectBrushRegions} from './group-brush.mjs';
 export function setupAssign(onChange) {
   const $=id=>document.getElementById(id), original=$('assign-original'),overlay=$('assign-overlay'),outline=$('assign-outline'),boundaries=$('assign-boundaries'),quantized=$('assign-quantized'),hints=$('assign-hints'),viewport=$('canvas-viewport'),cursor=$('brush-cursor');
@@ -15,14 +16,22 @@ export function setupAssign(onChange) {
   const cleanup=setupAssignmentCleanup({
     read:()=>snapshot?.result&&palette().length?{width:snapshot.source.width,height:snapshot.source.height,source:snapshot.source.data,at:model.at}:null,
     repaint:()=>{displayEdges=null;paintOverlay();paintHints();paintBoundaries();paintSelection();},
-    beforePreview:()=>{smoothing.hide();cancelStroke();deselect();$('tool-select').click();if($('pick').getAttribute('aria-pressed')==='true')$('pick').click();$('compare').checked=false;$('compare').dispatchEvent(new Event('change'));},
+    beforePreview:()=>{stencil.hide();smoothing.hide();cancelStroke();deselect();$('tool-select').click();if($('pick').getAttribute('aria-pressed')==='true')$('pick').click();$('compare').checked=false;$('compare').dispatchEvent(new Event('change'));},
     apply:labels=>{cancelStroke();deselect();if(model.assignPixels(labels))changed();}
   });
   const smoothing=setupBoundaryRefinement({
-    read:()=>snapshot?.result&&palette().length?{width:snapshot.source.width,height:snapshot.source.height,source:snapshot.source.data,at:model.at,palette:palette()}:null,
-    beforeBuild:()=>{cleanup.clear();cancelStroke();deselect();$('tool-select').click();if($('pick').getAttribute('aria-pressed')==='true')$('pick').click();$('compare').checked=false;$('compare').dispatchEvent(new Event('change'));},
-    onSave:()=>onChange(model.edited)
+    read:()=>snapshot?.result&&palette().length?{width:snapshot.source.width,height:snapshot.source.height,source:snapshot.source.data,at:model.at,palette:palette(),visible:t=>stencil.visible(t)}:null,
+    beforeBuild:()=>{stencil.hide();cleanup.clear();cancelStroke();deselect();$('tool-select').click();if($('pick').getAttribute('aria-pressed')==='true')$('pick').click();$('compare').checked=false;$('compare').dispatchEvent(new Event('change'));},
+    onSave:()=>{stencil.invalidate();onChange(model.edited);}
   });
+  const stencil=setupStencil({
+    read:()=>snapshot?.result&&palette().length?{width:snapshot.source.width,height:snapshot.source.height,source:snapshot.source.data,at:model.at,palette:palette(),recipe:smoothing.snapshot()}:null,
+    repaint:()=>{paintOverlay();paintHints();paintBoundaries();smoothing.paint();},
+    onSave:()=>onChange(model.edited),
+    beforeSheet:()=>{smoothing.hide();cleanup.clear();cancelStroke();deselect();if($('pick').getAttribute('aria-pressed')==='true')$('pick').click();$('compare').checked=false;$('compare').dispatchEvent(new Event('change'));},
+    onAssignIsland:(mask,treatment)=>{if(model.assignMask(mask,treatment)){deselect();changed();}}
+  });
+  $('layers-source-slot').append($('show-original').closest('label'));
   const displayAt=i=>cleanup.labels?cleanup.labels[i]:model.at(i);
   // Starting a canvas edit discards a stale preview; camera navigation preserves it.
   outline.addEventListener('pointerdown',()=>{smoothing.hide();if(cleanup.active)cleanup.clear();});
@@ -51,7 +60,7 @@ export function setupAssign(onChange) {
     $('unbleach-group').textContent=individual?'Make region unbleached':'Make group unbleached';
     $('unbleach-group').disabled=!!mask||lassoMode()||!editable||value<0;
     $('assign-count').textContent=snapshot?.result?`${assigned.toLocaleString()} pixels assigned`:'Computing…';
-    $('reset-assignments').hidden=!model.edited;cleanup.controls();smoothing.controls();
+    $('reset-assignments').hidden=!model.edited;cleanup.controls();smoothing.controls();stencil.controls();
   }
   function paintOverlay() {
     const ctx=overlay.getContext('2d');ctx.clearRect(0,0,overlay.width,overlay.height);
@@ -59,7 +68,7 @@ export function setupAssign(onChange) {
     const {result,source}=snapshot,data=ctx.createImageData(overlay.width,overlay.height);
     for(let i=0;i<result.labels.length;i++) {
       const id=result.labels[i];if(!source.data[i*4+3])continue;
-      const bucket=stroke?.ids.has(id)&&model.at(i)===UNASSIGNED?stroke.target:displayAt(i);if(bucket===-1)continue;
+      const bucket=stroke?.ids.has(id)&&model.at(i)===UNASSIGNED?stroke.target:displayAt(i);if(bucket===-1||!stencil.visible(bucket))continue;
       // A subtle hatch distinguishes unbleached from a naturally black group.
       const hatch=((i%overlay.width)+Math.floor(i/overlay.width))%12<2;
       const color=bucket===UNBLEACHED?(hatch?[95,125,145]:[12,16,20]):palette()[bucket];
@@ -70,7 +79,7 @@ export function setupAssign(onChange) {
   function paintHints(){
     hints.hidden=!$('assignment-hints').checked;
     const ctx=hints.getContext('2d');ctx.clearRect(0,0,hints.width,hints.height);
-    if(!snapshot?.result||hints.hidden||!palette().length)return;
+    if(!snapshot?.result||hints.hidden||!palette().length||!stencil.visible(UNASSIGNED))return;
     const data=ctx.createImageData(hints.width,hints.height);
     for(let y=0;y<hints.height;y++)for(let x=0;x<hints.width;x++){
       const i=y*hints.width+x,id=snapshot.result.labels[i];
@@ -113,7 +122,7 @@ export function setupAssign(onChange) {
     if(!snapshot?.result||boundaries.hidden)return;
     const pixels=ctx.createImageData(boundaries.width,boundaries.height);
     const merged=edges();
-    for(let i=0;i<merged.length;i++)if(merged[i]&&snapshot.source.data[i*4+3])pixels.data.set([30,165,185,220],i*4);
+    for(let i=0;i<merged.length;i++)if(merged[i]&&snapshot.source.data[i*4+3]&&stencil.visible(displayAt(i)))pixels.data.set([30,165,185,220],i*4);
     ctx.putImageData(pixels,0,0);
   }
   function paintSelection() {
@@ -134,7 +143,7 @@ export function setupAssign(onChange) {
     }
   }
   function changed(){
-    smoothing.invalidate();cleanup.clear();displayEdges=null;available=new Uint8Array(model.values.length);
+    stencil.invalidate();smoothing.invalidate();cleanup.clear();displayEdges=null;available=new Uint8Array(model.values.length);
     if(snapshot?.result)for(let i=0;i<snapshot.result.labels.length;i++)if(model.at(i)===UNASSIGNED&&snapshot.source.data[i*4+3]&&snapshot.result.labels[i]>=0)available[snapshot.result.labels[i]]=1;
     paintOverlay();paintHints();paintBoundaries();paintSelection();controls();onChange(model.edited);
   }
@@ -209,6 +218,7 @@ export function setupAssign(onChange) {
   });
   document.addEventListener('keydown',event=>{
     if(document.querySelector('dialog[open]')||/INPUT|SELECT|TEXTAREA/.test(event.target.tagName))return;
+    if(viewport.dataset.tool==='bridge')return;
     if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='z'){event.preventDefault();history(event.shiftKey);}
     if(event.key==='Enter'&&lassoMode()&&lasso){event.preventDefault();finishLasso();}
     if(event.key==='Escape'){smoothing.hide();cleanup.clear();cancelStroke();deselect();showOriginal(false);}
@@ -219,10 +229,11 @@ export function setupAssign(onChange) {
     get edited(){return model.edited;},
     snapshot(){return model.values.slice();},
     boundarySnapshot(){return smoothing.snapshot();},
+    stencilSnapshot(){return stencil.snapshot();},
     pixelSnapshot(){return model.overrides.some(v=>v!==-3)?model.overrides.slice():undefined;},
-    restore(values,pixels,boundaryRefinement){cancelStroke();displayEdges=null;model=newModel();model.values.set(Int16Array.from(values,v=>v===0?UNBLEACHED:v));if(pixels)model.overrides.set(pixels);deselect();changed();smoothing.restore(boundaryRefinement);},
+    restore(values,pixels,boundaryRefinement,stencilPlan){cancelStroke();displayEdges=null;model=newModel();model.values.set(Int16Array.from(values,v=>v===0?UNBLEACHED:v));if(pixels)model.overrides.set(pixels);deselect();changed();smoothing.restore(boundaryRefinement);stencil.restore(stencilPlan);},
     reset(){cancelStroke();displayEdges=null;model=newModel();deselect();changed();},
-    update(next){smoothing.reset();cancelStroke();displayEdges=null;snapshot=next;model=newModel();selected=-1;selectedTreatment=null;individual=false;mask=null;maskCount=0;buildBuckets();
+    update(next){if(next.source!==snapshot?.source)stencil.reset();smoothing.reset();cancelStroke();displayEdges=null;snapshot=next;model=newModel();selected=-1;selectedTreatment=null;individual=false;mask=null;maskCount=0;buildBuckets();
       for(const c of [original,overlay,outline,boundaries,quantized,hints]){c.width=next.source.width;c.height=next.source.height;}
       original.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(next.base),next.source.width,next.source.height),0,0);
       changed();}

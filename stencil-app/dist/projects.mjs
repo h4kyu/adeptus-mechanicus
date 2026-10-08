@@ -1,3 +1,4 @@
+import {validateStencilPlan} from './stencil-plan.mjs';
 // Portable project files preserve typed arrays at full image resolution.
 export const PROJECT_VERSION=1;
 const types={Uint8Array,Uint8ClampedArray,Int16Array,Int32Array,Float32Array};
@@ -44,6 +45,7 @@ export function validateProject(p) {
     for(let i=0;i<n;i++){const v=p.pixelAssignments[i];if(v===-3)continue;if(!count||!s.data[i*4+3]||!(v===-2||v===-1||v>0&&v<count))fail();}
   }
   if(p.boundaryRefinement!=null){const b=p.boundaryRefinement;if(!Number.isFinite(b.tolerance)||b.tolerance<0||b.tolerance>8||typeof b.preserveCorners!=='boolean')fail();}
+  if(p.stencilPlan!=null)validateStencilPlan(p.stencilPlan,s.width,s.height,p.result.palette?.length||0);
   const c=p.view.camera;if(c&&(!Number.isFinite(c.x)||!Number.isFinite(c.y)||!Number.isFinite(c.scale)||c.scale<=0||c.scale>32))fail();
   return p;
 }

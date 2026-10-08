@@ -6,15 +6,15 @@ export function setupBoundaryRefinement({read,beforeBuild,onSave}){
   const equal=(a,b)=>a&&b&&a.tolerance===b.tolerance&&a.preserveCorners===b.preserveCorners;
   function element(name,attrs){const e=document.createElementNS(ns,name);for(const [k,v] of Object.entries(attrs))e.setAttribute(k,v);return e;}
   function paint(){
-    const visible=!!result&&$('boundary-show').checked;surface.classList.toggle('vector-preview',visible);svg.toggleAttribute('hidden',!visible);
+    const visible=!!result&&$('boundary-show').checked&&!surface.classList.contains('sheet-preview');surface.classList.toggle('vector-preview',visible);svg.toggleAttribute('hidden',!visible);
     if(!visible)return;
     const state=read();if(!state)return;
     svg.setAttribute('viewBox',`0 0 ${state.width} ${state.height}`);svg.replaceChildren();
     const defs=element('defs',{}),pattern=element('pattern',{id:'vector-unbleached',width:12,height:12,patternUnits:'userSpaceOnUse'});
     pattern.append(element('rect',{width:12,height:12,fill:'#0c1014'}),element('path',{d:'M-6 6L6 -6M0 12L12 0M6 18L18 6',stroke:'#5f7d91','stroke-width':2}));defs.append(pattern);svg.append(defs);
     const fills=element('g',{opacity:Number($('overlay-opacity').value)/100,'fill-rule':'evenodd'});
-    for(const path of result.paths)fills.append(element('path',{d:path.d,fill:path.treatment===-2?'url(#vector-unbleached)':`rgb(${state.palette[path.treatment].join(',')})`}));
-    svg.append(fills,element('path',{d:result.stroke,fill:'none',stroke:'#1ea5b9','stroke-width':1,'vector-effect':'non-scaling-stroke'}));
+    for(const path of result.paths.filter(p=>!state.visible||state.visible(p.treatment)))fills.append(element('path',{d:path.d,fill:path.treatment===-2?'url(#vector-unbleached)':`rgb(${state.palette[path.treatment].join(',')})`}));
+    svg.append(fills);for(const path of result.paths.filter(p=>!state.visible||state.visible(p.treatment)))svg.append(element('path',{d:path.d,fill:'none',stroke:'#1ea5b9','stroke-width':1,'vector-effect':'non-scaling-stroke'}));
   }
   function controls(){
     $('boundary-build').disabled=!read()||!!worker;
@@ -48,7 +48,7 @@ export function setupBoundaryRefinement({read,beforeBuild,onSave}){
   $('boundary-build').addEventListener('click',()=>build());
   $('boundary-apply').addEventListener('click',()=>{if(!result)return;applied={...result.recipe};controls();$('boundary-status').textContent='Smoothing saved. Pixel assignments are unchanged.';onSave();});
   $('boundary-reset').addEventListener('click',()=>{applied=null;invalidate('Smoothing removed.');onSave();});
-  $('boundary-show').addEventListener('change',paint);
+  $('boundary-show').addEventListener('change',()=>{if($('boundary-show').checked)beforeBuild();paint();});
   $('overlay-opacity').addEventListener('input',paint);
   for(const id of ['boundary-tolerance','boundary-corners'])$(id).addEventListener('input',()=>{invalidate('Settings changed. Build a new preview.');controls();});
   return {controls,invalidate,hide,paint,
