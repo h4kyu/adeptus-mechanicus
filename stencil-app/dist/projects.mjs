@@ -43,6 +43,7 @@ export function validateProject(p) {
     const count=p.result.palette?.length||0;
     for(let i=0;i<n;i++){const v=p.pixelAssignments[i];if(v===-3)continue;if(!count||!s.data[i*4+3]||!(v===-2||v===-1||v>0&&v<count))fail();}
   }
+  if(p.boundaryRefinement!=null){const b=p.boundaryRefinement;if(!Number.isFinite(b.tolerance)||b.tolerance<0||b.tolerance>8||typeof b.preserveCorners!=='boolean')fail();}
   const c=p.view.camera;if(c&&(!Number.isFinite(c.x)||!Number.isFinite(c.y)||!Number.isFinite(c.scale)||c.scale<=0||c.scale>32))fail();
   return p;
 }

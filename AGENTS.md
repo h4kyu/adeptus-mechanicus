@@ -22,5 +22,7 @@
 
 - Pixel lasso edits use per-pixel exceptions over original region assignments, persisted in project files and sharing undo history with region edits. Treatment unions and display boundaries use effective pixel assignments. Double-click isolates an original region for explicit reassignment.
 
-- Refine includes post-assignment cleanup with threshold, unassigned-only/all-patches scopes, worker preview and atomic undoable Apply. It uses effective pixel treatments, preserves transparency, and merges only into assigned neighbors. Next planned work is boundary smoothing followed by per-sheet bridging; these are not implemented yet.
+- Refine includes post-assignment cleanup with threshold, unassigned-only/all-patches scopes, worker preview and atomic undoable Apply. It uses effective pixel treatments, preserves transparency, and merges only into assigned neighbors. Boundary smoothing is now implemented; per-sheet bridging is next.
 - Keep verification focused on newly changed features; the user explicitly wants to avoid unnecessary full-suite testing and usage.
+
+- Refine → Smooth boundaries traces shared SVG curves with a source-pixel deviation limit and corner preservation. Keep smoothing saves a separate `boundaryRefinement` recipe; assignments stay unchanged. Reopen regenerates vectors, edits invalidate the preview, and Remove smoothing clears the recipe. Physical dimensions and per-sheet bridging/export remain future work.

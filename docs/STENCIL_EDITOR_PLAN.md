@@ -2,6 +2,15 @@
 
 Updated: 2026-10-07. This is the current direction; older README sections describe incremental experiments and may be historical.
 
+## Vector boundary smoothing — implemented
+
+- Refine now has collapsible **Clean up assignments** and **Smooth boundaries** sections. Build a preview using **Maximum deviation** (0–8 original-image pixels) and **Preserve sharp corners**. Zero traces the exact pixel geometry.
+- Build a graph of pixel interfaces, trace shared chains between junctions, simplify within half the tolerance and round corners with quadratic curves using the remaining allowance. Adjacent treatments reuse exactly the same chains in reverse; holes use compound paths with even/odd fill. Strong corners and junctions are pinned. A spatial crossing check falls back to exact chains when necessary.
+- A worker builds real SVG treatment fills and shared outlines, aligned with the original-resolution image and camera. **Show vector preview** compares with pixel assignments; Hold to compare still shows the original. Starting a canvas edit returns to pixel view. Cleanup previews and vector previews do not overlap.
+- **Keep smoothing** saves an optional `boundaryRefinement` recipe in the portable project. Reopening regenerates curves from the saved assignments, without altering the raster source, segmentation or assignment undo history. **Remove smoothing** clears this independent output operation. Assignment edits invalidate displayed geometry and prompt a rebuild; the saved recipe remains reusable.
+- Five feature-focused tests cover simplification/corners, shared-boundary coverage, holes/disconnected pieces/transparency, zero tolerance and recipe persistence. Browser verification covered build, save and restored SVG display; the full suite was not rerun.
+- This is image-coordinate vector refinement. Physical dimensions, minimum cut widths, per-sheet composition, bridges and production SVG export remain next steps. Crossing checks are not a substitute for later physical cut validation.
+
 ## Post-assignment cleanup — implemented
 
 - Refine now offers **Clean up assignments**: an area threshold in original-image pixels, **Unassigned leftovers only** (default), or **All small patches** (includes assigned intensities and Unbleached).
@@ -10,7 +19,7 @@ Updated: 2026-10-07. This is the current direction; older README sections descri
 - **Preview cleanup** runs in a background worker. Tint, unassigned hints and boundaries preview the result; amber highlights changed pixels. **Show cleanup preview** compares with current assignments. Preview is transient and never saved or added to undo history. Changing settings or assignments, starting a canvas edit, Cancel, Escape or closing Refine discards it; camera navigation can preserve a finished preview.
 - **Apply cleanup** writes pixel exceptions as one undoable edit, using the existing repo autosave and portable project fields. Threshold and scope persist; older projects default to 20 pixels and unassigned-only. Original pixels and segmentation stay intact.
 - Focused validation: four cleanup tests (ownership scopes, shared-border merging, threshold/transparency, pixel edits and atomic undo); browser preview/apply/undo check. Per user request, the full suite was not rerun.
-- Agreed next sequence: post-assignment cleanup → vector tracing/boundary smoothing → bridges on each actual stencil sheet. Physical size and separate-versus-cumulative intensity sheets must be established for production geometry. Smoothing and bridging are not implemented in this slice.
+- Agreed next sequence: post-assignment cleanup → vector tracing/boundary smoothing → bridges on each actual stencil sheet. Physical size and separate-versus-cumulative intensity sheets must be established for production geometry. Vector smoothing is now implemented as described above; bridging remains next.
 
 ## Pixel lasso — implemented, latest direction
 

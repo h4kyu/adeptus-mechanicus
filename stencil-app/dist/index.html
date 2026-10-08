@@ -65,14 +65,24 @@
 <div id="brush-settings" hidden><label for="brush-size">Brush diameter <output id="brush-size-value">32 px</output></label><input id="brush-size" type="range" min="1" max="128" value="32"><p class="muted" id="brush-help">Choose a treatment above. Paint whole regions; assigned regions are skipped.</p><p id="brush-status" role="status" class="muted"></p></div>
 <label class="check"><input id="assignment-hints" type="checkbox" checked> Mark unassigned pixels</label><p class="assignment-legend"><span class="unassigned-key"></span> Unassigned · dotted <span class="assigned-key"></span> Assigned · tinted</p><div id="view-settings"></div></div></details>
 <details id="refine-island" class="editor-island"><summary>Refine</summary><div class="island-content">
-<h3>Clean up assignments</h3>
+<details class="tool-details"><summary>Clean up assignments</summary>
 <label for="refine-minimum">Merge patches smaller than (pixels)</label><input id="refine-minimum" type="number" min="1" max="1000000" step="1" value="20">
 <label for="refine-scope">Include</label><select id="refine-scope"><option value="unassigned">Unassigned leftovers only</option><option value="all">All small patches</option></select>
 <p class="muted">Favors the longest shared border. Preserves transparent gaps.</p>
 <button id="refine-preview" disabled>Preview cleanup</button>
 <label id="refine-show-row" class="check" hidden><input id="refine-show" type="checkbox" checked> Show cleanup preview</label>
 <p id="refine-status" class="muted" role="status" aria-live="polite"></p>
-<div class="assign-secondary"><button id="refine-apply" disabled>Apply cleanup</button><button id="refine-cancel" class="secondary" disabled>Cancel preview</button></div>
+<div class="assign-secondary"><button id="refine-apply" disabled>Apply cleanup</button><button id="refine-cancel" class="secondary" disabled>Cancel preview</button></div></details>
+<details class="tool-details" open><summary>Smooth boundaries</summary>
+<label for="boundary-tolerance">Maximum deviation <output id="boundary-tolerance-value">1 px</output></label>
+<input id="boundary-tolerance" type="range" min="0" max="8" step="0.25" value="1">
+<label class="check"><input id="boundary-corners" type="checkbox" checked> Preserve sharp corners</label>
+<p class="muted">Trace assigned shapes into shared vector curves. Distances use original-image pixels.</p>
+<button id="boundary-build" disabled>Build smooth boundaries</button>
+<label id="boundary-show-row" class="check" hidden><input id="boundary-show" type="checkbox" checked> Show vector preview</label>
+<p id="boundary-status" class="muted" role="status" aria-live="polite"></p>
+<div class="assign-secondary"><button id="boundary-apply" disabled>Keep smoothing</button><button id="boundary-reset" class="secondary" disabled>Remove smoothing</button></div>
+</details>
 </div></details>
 </aside>
 <div class="workspace">
@@ -90,7 +100,7 @@
 </div>
 <div class="assign-only" id="assign-view"><div class="overlay-tools"><label for="overlay-opacity">Overlay opacity <output id="overlay-value">50%</output></label><input id="overlay-opacity" type="range" min="0" max="100" value="50"><label class="check original-toggle"><input id="show-original" type="checkbox" checked> Show original</label><button id="peek-original">Hold to compare</button></div>
 
-<div id="assign-surface"><canvas id="assign-original" aria-label="Original image"></canvas><canvas id="assign-quantized" aria-hidden="true"></canvas><canvas id="assign-overlay" aria-hidden="true"></canvas><canvas id="assign-hints" aria-hidden="true"></canvas><canvas id="assign-boundaries" aria-hidden="true"></canvas><canvas id="assign-outline" aria-label="Select regions or lasso pixels to assign a treatment"></canvas></div></div>
+<div id="assign-surface"><canvas id="assign-original" aria-label="Original image"></canvas><canvas id="assign-quantized" aria-hidden="true"></canvas><canvas id="assign-overlay" aria-hidden="true"></canvas><canvas id="assign-hints" aria-hidden="true"></canvas><canvas id="assign-boundaries" aria-hidden="true"></canvas><svg id="assign-vectors" aria-label="Smoothed treatment boundaries" hidden></svg><canvas id="assign-outline" aria-label="Select regions or lasso pixels to assign a treatment"></canvas></div></div>
 </div>
 </main>
 <dialog id="discard-dialog" aria-labelledby="discard-title"><form method="dialog"><h2 id="discard-title">Discard manual assignments?</h2><p>This clears your assignments and undo history. Your original image stays untouched. This reset will be saved automatically.</p><div class="edit-actions"><button value="cancel" autofocus>Keep editing</button><button value="discard">Discard assignments</button></div></form></dialog>

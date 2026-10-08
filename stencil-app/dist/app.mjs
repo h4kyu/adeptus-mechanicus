@@ -287,10 +287,10 @@ document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!document.q
 $('reset-assignments').addEventListener('click',async()=>{if(await confirmReset())assignment.reset();});
 
 const camera=createViewport(()=>projects?.changed());
-const settingIds=['mode','color-space','color-count','cleanup','cleanup-size','smoothing','smooth-radius','smooth-strength','background-mode','background','tolerance','alpha','min-size','min-size-enabled','outlines','show-palette','compare','overlay-opacity','show-original','assignment-hints','refine-minimum','refine-scope'];
+const settingIds=['mode','color-space','color-count','cleanup','cleanup-size','smoothing','smooth-radius','smooth-strength','background-mode','background','tolerance','alpha','min-size','min-size-enabled','outlines','show-palette','compare','overlay-opacity','show-original','assignment-hints','refine-minimum','refine-scope','boundary-tolerance','boundary-corners'];
 function readSettings(){return Object.fromEntries(settingIds.map(id=>[id,id==='min-size'?String(committedMinimum):id==='cleanup-size'?String(committedCleanup):$(id).type==='checkbox'?$(id).checked:$(id).value]));}
 const defaultSettings=readSettings();
-function settingValue(settings,id){return settings[id]??({'min-size-enabled':true,'assignment-hints':true,'refine-minimum':'20','refine-scope':'unassigned'})[id];}
+function settingValue(settings,id){return settings[id]??({'min-size-enabled':true,'assignment-hints':true,'refine-minimum':'20','refine-scope':'unassigned','boundary-tolerance':'1','boundary-corners':true})[id];}
 function validateSettings(settings){
   for(const id of settingIds){const node=$(id),v=settingValue(settings,id);
     if(node.type==='checkbox'){if(typeof v!=='boolean')throw Error('Invalid project settings.');}
@@ -311,14 +311,14 @@ function ready(){if(result)return Promise.resolve();if($('status').textContent==
 let thumbnailSource,thumbnailData;
 function thumbnail(image){if(image===thumbnailSource)return thumbnailData;const c=document.createElement('canvas'),scale=Math.min(1,240/image.width,160/image.height);c.width=Math.max(1,Math.round(image.width*scale));c.height=Math.max(1,Math.round(image.height*scale));const full=document.createElement('canvas');full.width=image.width;full.height=image.height;full.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(image.data),image.width,image.height),0,0);c.getContext('2d').drawImage(full,0,0,c.width,c.height);thumbnailSource=image;thumbnailData=c.toDataURL('image/png');return thumbnailData;}
 projects=setupProjects({sample,validateSettings,thumbnail,
-  async snapshot(){await ready();return {source:{width:source.width,height:source.height,data:source.data},result,assignments:assignment.snapshot(),pixelAssignments:assignment.pixelSnapshot(),settings:readSettings(),filename:$('filename').textContent,thumbnail:thumbnail(source),view:{stage:document.body.dataset.stage,camera:camera.snapshot(),hiddenLayers:[...hiddenLayers],inspectSide,selected,selectedLayer,sideStates:Object.fromEntries(Object.entries(sideStates).map(([key,value])=>[key,{...value,hiddenLayers:[...value.hiddenLayers]}]))}};},
+  async snapshot(){await ready();return {source:{width:source.width,height:source.height,data:source.data},result,assignments:assignment.snapshot(),pixelAssignments:assignment.pixelSnapshot(),boundaryRefinement:assignment.boundarySnapshot(),settings:readSettings(),filename:$('filename').textContent,thumbnail:thumbnail(source),view:{stage:document.body.dataset.stage,camera:camera.snapshot(),hiddenLayers:[...hiddenLayers],inspectSide,selected,selectedLayer,sideStates:Object.fromEntries(Object.entries(sideStates).map(([key,value])=>[key,{...value,hiddenLayers:[...value.hiddenLayers]}]))}};},
   async restore(p){
     validateSettings(p.settings);clearTimeout(timer);worker?.terminate();revision++;uploadRevision++;cancelPick();
     canvas.width=p.source.width;canvas.height=p.source.height;source=new ImageData(new Uint8ClampedArray(p.source.data),canvas.width,canvas.height);buildBase();result=p.result;smoothedBase=preparedBase=null;buildSmoothedView();
     applySettings(p.settings);inspectSide=p.view.inspectSide==='before'?'before':'after';$('inspect-side').value=inspectSide;
     const state=(v={})=>({hiddenLayers:new Set(Array.isArray(v.hiddenLayers)?v.hiddenLayers.filter(x=>Number.isInteger(x)&&x>=0&&x<8):[]),selected:Number.isInteger(v.selected)?v.selected:-1,selectedLayer:Number.isInteger(v.selectedLayer)?v.selectedLayer:-1});
     ({hiddenLayers,selected,selectedLayer}=state(p.view));sideStates={before:state(p.view.sideStates?.before),after:state(p.view.sideStates?.after)};hover=-1;
-    assignment.update({source,base,result});assignment.restore(p.assignments,p.pixelAssignments);$('filename').textContent=typeof p.filename==='string'?p.filename:p.name;
+    assignment.update({source,base,result});assignment.restore(p.assignments,p.pixelAssignments,p.boundaryRefinement);$('filename').textContent=typeof p.filename==='string'?p.filename:p.name;
     $('dimensions').textContent=`${canvas.width} × ${canvas.height} px · original resolution`;$('error').textContent='';
     $('status').textContent=`${result.regions.length.toLocaleString()} areas · ${result.ignoredPixels.toLocaleString()} pixels in filtered-out regions`;
     document.body.classList.remove('no-project');setStage(p.view.stage==='assign'?'assign':'prepare');renderPalette();draw();camera.restore(p.view.camera);
