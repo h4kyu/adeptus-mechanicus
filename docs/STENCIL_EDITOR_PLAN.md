@@ -1,14 +1,15 @@
 # Stencil editor plan and project memory
 
-Updated: 2026-10-07. This is the current direction; older README sections describe incremental experiments and may be historical.
+Updated: 2026-10-08. This is the current direction; older README sections describe incremental experiments and may be historical.
 
 ## Vector boundary smoothing — implemented
 
 - Refine now has collapsible **Clean up assignments** and **Smooth boundaries** sections. Build a preview using **Maximum deviation** (0–8 original-image pixels) and **Preserve sharp corners**. Zero traces the exact pixel geometry.
-- Build a graph of pixel interfaces, trace shared chains between junctions, simplify within half the tolerance and round corners with quadratic curves using the remaining allowance. Adjacent treatments reuse exactly the same chains in reverse; holes use compound paths with even/odd fill. Strong corners and junctions are pinned. A spatial crossing check falls back to exact chains when necessary.
+- Build a graph of pixel interfaces, trace shared chains between junctions, simplify within half the tolerance and round corners with quadratic curves using the remaining allowance. Adjacent treatments reuse exactly the same chains in reverse; holes use compound paths with even/odd fill. Strong corners and junctions are pinned. A spatial crossing check retries conflicting chains at half, quarter, eighth and sixteenth of the requested deviation before falling back to exact geometry. Every retry rechecks the whole boundary network; unrelated chains retain their requested smoothing. This is adaptive per-chain retry, not segment-local fallback.
 - A worker builds real SVG treatment fills and shared outlines, aligned with the original-resolution image and camera. **Show vector preview** compares with pixel assignments; Hold to compare still shows the original. Starting a canvas edit returns to pixel view. Cleanup previews and vector previews do not overlap.
 - **Keep smoothing** saves an optional `boundaryRefinement` recipe in the portable project. Reopening regenerates curves from the saved assignments, without altering the raster source, segmentation or assignment undo history. **Remove smoothing** clears this independent output operation. Assignment edits invalidate displayed geometry and prompt a rebuild; the saved recipe remains reusable.
-- Five feature-focused tests cover simplification/corners, shared-boundary coverage, holes/disconnected pieces/transparency, zero tolerance and recipe persistence. Browser verification covered build, save and restored SVG display; the full suite was not rerun.
+- Six feature-focused tests cover simplification/corners, shared-boundary coverage, holes/disconnected pieces/transparency, zero tolerance, recipe persistence and adaptive 5 px retry on a narrow jagged strip while preserving an unrelated boundary. Browser verification covered build, save and restored SVG display; the full suite was not rerun.
+- The preview reports how many boundaries needed reduced deviation and the smallest value used, separately from any boundaries that still required exact geometry. Rebuild existing previews to use the adaptive algorithm; saved recipes need no migration.
 - This is image-coordinate vector refinement. Physical dimensions, minimum cut widths, per-sheet composition, bridges and production SVG export remain next steps. Crossing checks are not a substitute for later physical cut validation.
 
 ## Post-assignment cleanup — implemented

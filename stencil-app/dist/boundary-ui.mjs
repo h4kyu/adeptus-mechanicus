@@ -38,7 +38,7 @@ export function setupBoundaryRefinement({read,beforeBuild,onSave}){
       worker.onmessage=({data})=>{
         if(current!==generation)return;if(data.error){fail(data.error);return;}
         worker.terminate();worker=null;result={...data,recipe:selected};$('boundary-show').checked=true;
-        $('boundary-status').textContent=data.paths.length?`${data.sourceEdges.toLocaleString()} pixel edges → ${data.segments.toLocaleString()} vector segments.${data.protectedChains?' Some boundaries kept exact to avoid crossings.':''}`:'Assign some pixels before building boundaries.';
+        $('boundary-status').textContent=data.paths.length?`${data.sourceEdges.toLocaleString()} pixel edges → ${data.segments.toLocaleString()} vector segments.${data.reducedChains?` ${selected.tolerance} px requested; reduced to as little as ${data.minimumTolerance} px on ${data.reducedChains} ${data.reducedChains===1?'boundary':'boundaries'} to avoid crossings.`:''}${data.protectedChains?` ${data.protectedChains} ${data.protectedChains===1?'boundary kept':'boundaries kept'} exact where retries still conflicted.`:''}`:'Assign some pixels before building boundaries.';
         controls();paint();
       };
       worker.onerror=()=>fail('Worker unavailable.');

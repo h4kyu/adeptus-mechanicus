@@ -76,16 +76,22 @@ export function traceBoundaries(treatments,alpha,width,height,{tolerance=1,prese
  const chains=[];
  function walk(first,start){let e=first,v=start;const points=[point(v)],id=chains.length;
    while(true){const edge=edges[e];edge.chain=id;edge.forward=edge.a===v;v=edge.forward?edge.b:edge.a;points.push(point(v));if(v===start||joint(v))break;const next=vertices.get(v).find(i=>i!==e);if(edges[next].chain>=0)break;e=next;}
-   chains.push({points,segments:tolerance?rounded(points,tolerance,preserveCorners):exact(points),protected:false});
+   chains.push({points,segments:tolerance?rounded(points,tolerance,preserveCorners):exact(points),protected:false,tolerance,retries:0});
  }
  for(const [v,ids] of vertices)if(joint(v))for(const id of ids)if(edges[id].chain<0)walk(id,v);
  edges.forEach((e,id)=>{if(e.chain<0)walk(id,e.a);});
- // Reject changed chains that cross any other boundary. Recheck against restored chains.
- if(tolerance)for(let pass=0;pass<4;pass++){
+ // Reduce only conflicting chains. Every retry spends a finite per-chain budget,
+ // and every pass checks the whole network against the newly adjusted neighbors.
+ // Do not revert unrelated chains after an arbitrary number of global passes.
+ if(tolerance)while(true){
    const bad=conflicts(chains,Math.max(4,tolerance*2));if(!bad.size)break;
-   let changed=false;for(const id of bad)if(!chains[id].protected){chains[id].segments=exact(chains[id].points);chains[id].protected=true;changed=true;}
+   let changed=false;
+   for(const id of bad){const chain=chains[id];if(chain.protected)continue;
+     chain.retries++;chain.tolerance=chain.retries<=4?tolerance/(2**chain.retries):0;
+     chain.segments=chain.tolerance?rounded(chain.points,chain.tolerance,preserveCorners):exact(chain.points);
+     chain.protected=chain.tolerance===0;changed=true;
+   }
    if(!changed)break;
-   if(pass===3)for(const chain of chains){chain.segments=exact(chain.points);chain.protected=true;}
  }
  // Walk directed raster edges around each treatment; replace each shared chain once.
  const paths=[],treatmentSet=new Set(edges.flatMap(e=>[e.left,e.right]).filter(assigned));
@@ -106,5 +112,6 @@ export function traceBoundaries(treatments,alpha,width,height,{tolerance=1,prese
    paths.push({treatment,d});
  }
  const stroke=chains.map(c=>`M${coordinate(c.segments[0].a)}`+commands(c.segments)+(same(c.points[0],c.points.at(-1))?'Z':'')).join('');
- return {paths,stroke,sourceEdges:edges.length,segments:chains.reduce((sum,c)=>sum+c.segments.length,0),protectedChains:chains.filter(c=>c.protected).length};
+ const reduced=chains.filter(c=>c.tolerance>0&&c.tolerance<tolerance);
+ return {reducedChains:reduced.length,minimumTolerance:reduced.length?reduced.reduce((min,c)=>Math.min(min,c.tolerance),tolerance):tolerance,paths,stroke,sourceEdges:edges.length,segments:chains.reduce((sum,c)=>sum+c.segments.length,0),protectedChains:chains.filter(c=>c.protected).length};
 }

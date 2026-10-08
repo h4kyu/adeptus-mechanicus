@@ -34,3 +34,14 @@ test('smoothing recipe round trips and rejects invalid settings',()=>{
  assert.deepEqual(decodeProject(encodeProject(p)).boundaryRefinement,p.boundaryRefinement);
  p.boundaryRefinement.tolerance=100;assert.throws(()=>decodeProject(encodeProject(p)));
 });
+
+test('5px retries narrow jagged strips without reducing an unrelated boundary',()=>{
+ const width=80,height=70,recipe={tolerance:5,preserveCorners:false};
+ const circle=Int16Array.from({length:width*height},(_,i)=>(i%width-60)**2+(Math.floor(i/width)-35)**2<144?2:-1);
+ const values=Int16Array.from(circle,(value,i)=>{const x=i%width,y=Math.floor(i/width),left=20+Math.round(8*Math.sin(y/4));return y>3&&y<66&&x>=left&&x<left+2?1:value;});
+ const original=values.slice(),out=trace(values,width,recipe),isolated=trace(circle,width,recipe);
+ assert.ok(out.reducedChains>0);assert.equal(out.minimumTolerance,1.25);assert.equal(out.protectedChains,0);
+ assert.match(out.paths.find(p=>p.treatment===1).d,/Q/);
+ assert.equal(out.paths.find(p=>p.treatment===2).d,isolated.paths.find(p=>p.treatment===2).d);
+ assert.deepEqual(values,original);
+});
