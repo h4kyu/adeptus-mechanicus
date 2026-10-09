@@ -1,3 +1,4 @@
+import {setupStencilPreview} from './stencil-preview-ui.mjs';
 import {sheetLayers} from './sheet-composition.mjs';
 import {newStencilPlan,createBridgeHistory} from './stencil-plan.mjs';
 import {sheetScale,pointSegmentDistance} from './stencil-geometry.mjs';
@@ -24,7 +25,7 @@ export function setupStencil({read,repaint,onSave,beforeSheet,onAssignIsland}){
 
  }
  function controls(){const s=read(),b=chosen(),ready=!!s;layers();
-   for(const id of ['bridge-add','stencil-show','stencil-active'])$(id).disabled=!ready;
+   for(const id of ['bridge-add','stencil-show','stencil-active','stencil-preview-open'])$(id).disabled=!ready;
    $('bridge-auto').disabled=!ready||!result?.islands.length||autoBusy;$('bridge-auto').textContent=autoBusy?'Finding bridges…':`Auto bridge · ${plan.autoBridgeMinMm}–${plan.autoBridgeMaxMm} mm`;
    for(const [id,key] of [['bridge-auto-min','autoBridgeMinMm'],['bridge-auto-max','autoBridgeMaxMm']])if(document.activeElement!==$(id))$(id).value=plan[key];
    $('bridge-add').setAttribute('aria-pressed',String(adding));$('bridge-add').textContent=adding?'Stop drawing bridges':'Add bridge';if(document.activeElement!==$('bridge-width'))$('bridge-width').value=b?b.widthMm:plan.bridgeWidthMm;
@@ -122,6 +123,7 @@ export function setupStencil({read,repaint,onSave,beforeSheet,onAssignIsland}){
  $('layers-solo').addEventListener('click',()=>{plan.hiddenLayers=[-1,-2,...(read()?.palette||[]).slice(1).map((_,i)=>i+1)].filter(v=>!sheetLayers(plan).includes(v));layers();paint();repaint();save();});
  $('layers-all').addEventListener('click',()=>{plan.hiddenLayers=[];layers();paint();repaint();save();});
  document.addEventListener('keydown',e=>{if(!mode()||document.querySelector('dialog[open]')||e.target.closest('input,select,textarea'))return;if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();undo(e.shiftKey);}else if(e.key==='Escape'){cancel();selected=null;paint();}else if(e.key==='Delete'||e.key==='Backspace'){if(chosen()){e.preventDefault();$('bridge-delete').click();}}});
+ setupStencilPreview({prepare:()=>{cancel();beforeSheet();},read:()=>{const s=read();return s?{...s,plan:structuredClone(plan),paths,sheetPaths:paths?sheetPaths:{}}:null;}});
  return {visible,controls,invalidate,paint,
    snapshot:()=>structuredClone(plan),
    hide(){plan.showSheet=false;stop();cancel();paint();},

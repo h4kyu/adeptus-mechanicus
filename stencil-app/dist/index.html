@@ -86,6 +86,7 @@
 </details>
 </div></details>
 <details id="stencil-island" class="editor-island"><summary>Stencil &amp; bridges</summary><div class="island-content">
+<button id="stencil-preview-open">Preview sheets &amp; bleach result</button>
 <label for="stencil-active">Active sheet</label><select id="stencil-active"></select>
 <details class="tool-details"><summary>Layer overlap</summary>
 <p class="muted">Also cut these layers on this sheet. Their own sheets stay independent.</p>
@@ -134,6 +135,16 @@
 <dialog id="discard-dialog" aria-labelledby="discard-title"><form method="dialog"><h2 id="discard-title">Discard manual assignments?</h2><p>This clears your assignments and undo history. Your original image stays untouched. This reset will be saved automatically.</p><div class="edit-actions"><button value="cancel" autofocus>Keep editing</button><button value="discard">Discard assignments</button></div></form></dialog>
 <dialog id="project-library" aria-labelledby="library-title"><div class="library-heading"><div><p class="eyebrow">STENCIL STUDIO</p><h2 id="library-title">Your projects</h2></div><button id="library-close" aria-label="Close project library">×</button></div><p class="muted">Saved as files in stencil-app/projects/ in this repo. Export a project for an extra backup.</p><div class="library-actions"><button id="library-new">New project</button><button id="library-import">Import project</button><button id="library-sample">Try a sample</button></div><button id="library-migrate" class="text-button">Copy browser projects to repo</button><p id="migration-status" class="muted" role="status"></p><input id="project-import" type="file" accept=".json,.stencil" hidden><p id="project-error" role="alert"></p><p id="project-empty" class="muted">No projects yet. Start with an image or try the sample.</p><div id="project-grid"></div></dialog>
 <dialog id="project-dialog" aria-labelledby="project-dialog-title"><form method="dialog"><h2 id="project-dialog-title"></h2><p id="project-dialog-message"></p><label id="project-name-label" for="project-name">Project name<input id="project-name" maxlength="200" autocomplete="off"></label><div class="edit-actions"><button value="cancel" formnovalidate>Cancel</button><button id="project-dialog-action" value="accept">Save name</button></div></form></dialog>
+<dialog id="stencil-preview" aria-labelledby="preview-title">
+<div class="preview-heading"><h2 id="preview-title">Stencil preview</h2><button id="preview-close" aria-label="Close preview">Back to editor</button></div>
+<div class="preview-toolbar"><div class="preview-modes"><button id="preview-sheet-mode" aria-pressed="true">Mylar sheets</button><button id="preview-bleach-mode" aria-pressed="false">Bleached result</button></div>
+<div id="preview-sheet-controls"><button id="preview-prev" aria-label="Previous sheet">←</button><select id="preview-layer" aria-label="Preview sheet"></select><button id="preview-next" aria-label="Next sheet">→</button></div>
+<div class="preview-zoom"><button id="preview-out" aria-label="Zoom preview out">−</button><output id="preview-zoom-value">100%</output><button id="preview-in" aria-label="Zoom preview in">+</button><button id="preview-fit">Fit</button></div></div>
+<div id="preview-passes" aria-label="Visible bleach passes" hidden></div>
+<p id="preview-status" class="muted" role="status"></p>
+<div id="preview-stage"><svg id="preview-art" role="img" aria-label="Stencil or bleached fabric preview"></svg></div>
+<div class="preview-footer"><p id="preview-note"></p><span id="preview-size"></span></div>
+</dialog>
 <script type="module" src="app.mjs?v=editor-2"></script>
 <div id="brush-cursor" hidden aria-hidden="true"></div>
 </body></html>

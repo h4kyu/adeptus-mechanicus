@@ -2,6 +2,14 @@
 
 Updated: 2026-10-08. This is the current direction; older README sections describe incremental experiments and may be historical.
 
+## Mylar and finished bleach previews — implemented
+
+- **Stencil & bridges → Preview sheets & bleach result** opens a separate read-only preview with **Mylar sheets** and **Bleached result** modes, pan, zoom and Fit. Returning to the editor leaves assignments, sheet configuration and bridges intact. Closing terminates pending preview work.
+- Mylar mode shows uniform pale sheet material against a dark surface, with actual vector cutouts, enabled bridges in the same material, physical sheet margin and dimensions. A selector and previous/next buttons browse each sheet. No source image, treatment tint, island highlights or editing handles appear.
+- Bleached result uses warm brown-to-cream tones on charcoal fabric with subtle weave. Each sheet's actual smoothed/overlapping opening is masked by its enabled bridges. The strongest visible pass wins in overlaps; this intentionally does not calculate cumulative exposure, chemistry, order, or real fabric color. Individual pass toggles are preview-only; all start visible regardless of editor layer visibility.
+- A background worker builds the sheets using the same membership/smoothing geometry as bridging, reusing available path caches. SVG masks preserve vector detail and physical bridge widths. Preview controls are transient and do not modify project data. Cutter-ready export remains separate future work.
+- Four focused tests cover overlap and enabled bridges, material/opening masks and physical widths, strongest-pass composition/visibility, and cached smoothing. Browser verification used a disposable copy of the current artwork for both renderings, sheet switching, pass visibility, zoom and return to editor.
+
 ## Separate stencil sheets and editable bridges — implemented
 
 - One independent sheet per positive intensity; Unbleached has no cut sheet. By default only the active intensity is cut out. Per-sheet Layer overlap can include additional intensity regions (see below). Other assignments, unassigned pixels and transparent source areas are retained sheet material. Unassigned counts remain visible instead of silently assigning them.
