@@ -1,11 +1,12 @@
 import {setupStencilPreview} from './stencil-preview-ui.mjs';
+import {setupStencilExport} from './stencil-export-ui.mjs';
 import {sheetLayers} from './sheet-composition.mjs';
 import {newStencilPlan,createBridgeHistory} from './stencil-plan.mjs';
 import {sheetScale,pointSegmentDistance} from './stencil-geometry.mjs';
 export function setupStencil({read,repaint,onSave,beforeSheet,onAssignIsland}){
  const $=id=>document.getElementById(id),svg=$('assign-stencil'),islandCanvas=$('assign-islands'),outline=$('assign-outline'),surface=$('assign-surface'),viewport=$('canvas-viewport'),ns='http://www.w3.org/2000/svg';
  let plan=newStencilPlan(),history=createBridgeHistory(),result=null,paths=null,sheetPaths={},worker=null,timer=null,generation=0,selected=null,selectedIsland=0,drag=null,adding=false,layerSignature='',missing=0,revision=0,autoBusy=false;
- const mode=()=>viewport.dataset.tool==='bridge',visible=t=>!plan.hiddenLayers.includes(t),chosen=()=>plan.bridges.find(b=>b.id===selected),scale=()=>{const s=read();return s?sheetScale(s.width,s.height,plan.longEdgeInches,plan.marginMm):null;};
+ const mode=()=>viewport.dataset.tool==='bridge',visible=t=>!plan.hiddenLayers.includes(t),chosen=()=>plan.bridges.find(b=>b.id===selected),scale=()=>{const s=read();return s?sheetScale(s.width,s.height,plan.longEdgeInches):null;};
  function element(name,attrs){const e=document.createElementNS(ns,name);for(const [k,v] of Object.entries(attrs))e.setAttribute(k,v);return e;}
  function save(){onSave();}
  function bridgeList(){const list=$('bridge-list');list.replaceChildren();for(const b of plan.bridges.filter(b=>b.layer===plan.activeLayer)){
@@ -25,7 +26,7 @@ export function setupStencil({read,repaint,onSave,beforeSheet,onAssignIsland}){
 
  }
  function controls(){const s=read(),b=chosen(),ready=!!s;layers();
-   for(const id of ['bridge-add','stencil-show','stencil-active','stencil-preview-open'])$(id).disabled=!ready;
+   for(const id of ['bridge-add','stencil-show','stencil-active','stencil-preview-open','stencil-export-open'])$(id).disabled=!ready;
    $('bridge-auto').disabled=!ready||!result?.islands.length||autoBusy;$('bridge-auto').textContent=autoBusy?'Finding bridges…':`Auto bridge · ${plan.autoBridgeMinMm}–${plan.autoBridgeMaxMm} mm`;
    for(const [id,key] of [['bridge-auto-min','autoBridgeMinMm'],['bridge-auto-max','autoBridgeMaxMm']])if(document.activeElement!==$(id))$(id).value=plan[key];
    $('bridge-add').setAttribute('aria-pressed',String(adding));$('bridge-add').textContent=adding?'Stop drawing bridges':'Add bridge';if(document.activeElement!==$('bridge-width'))$('bridge-width').value=b?b.widthMm:plan.bridgeWidthMm;
@@ -33,18 +34,18 @@ export function setupStencil({read,repaint,onSave,beforeSheet,onAssignIsland}){
    $('bridge-reset').disabled=!autoBusy&&!plan.bridges.some(b=>b.layer===plan.activeLayer);
    $('bridge-undo').disabled=!history.canUndo;$('bridge-redo').disabled=!history.canRedo;
    $('island-next').disabled=!result?.islands.length;$('island-assign').disabled=!result?.islands.some(i=>i.id===selectedIsland)||!ready;
-   $('stencil-show').checked=plan.showSheet;$('stencil-islands').checked=plan.showIslands;if(document.activeElement!==$('stencil-size'))$('stencil-size').value=plan.longEdgeInches;if(document.activeElement!==$('stencil-margin'))$('stencil-margin').value=plan.marginMm;
-   if(s){const metric=scale();$('stencil-dimensions').textContent=`Artwork ${metric.widthInches.toFixed(2)} × ${metric.heightInches.toFixed(2)} in · sheet ${(metric.widthInches+plan.marginMm/12.7).toFixed(2)} × ${(metric.heightInches+plan.marginMm/12.7).toFixed(2)} in`;}
+   $('stencil-show').checked=plan.showSheet;$('stencil-islands').checked=plan.showIslands;if(document.activeElement!==$('stencil-size'))$('stencil-size').value=plan.longEdgeInches;
+   if(s){const metric=scale();$('stencil-dimensions').textContent=`Artwork ${metric.widthInches.toFixed(2)} × ${metric.heightInches.toFixed(2)} in · working area ${metric.sheetWidthMm} × ${metric.sheetHeightMm} mm. ${metric.fits?'Artwork centered; surrounding Mylar stays intact.':`Too large: use a long edge of at most ${metric.maxLongEdgeInches.toFixed(2)} in.`}`;}
    const status=b&&result?.bridgeStatus.find(item=>item.id===b.id);$('bridge-selection').textContent=adding?'Drag to draw bridges repeatedly. Press Escape to stop.':b?status?.reason||'Bridge selected. Drag its ends or center to edit.':'Select a bridge or a highlighted island. Assign tools remain available.';
    bridgeList();
  }
  function paint(){const s=read(),show=!!s&&plan.showSheet;surface.classList.toggle('sheet-preview',show);svg.toggleAttribute('hidden',!show);islandCanvas.hidden=!show||!plan.showIslands||!result;
-   if(!s)return;svg.setAttribute('viewBox',`0 0 ${s.width} ${s.height}`);svg.replaceChildren();const metric=scale(),m=metric.margin;
-   if(show){svg.append(element('rect',{x:-m,y:-m,width:s.width+2*m,height:s.height+2*m,fill:'transparent'}));const defs=element('defs',{}),mask=element('mask',{id:'stencil-material',maskUnits:'userSpaceOnUse',x:-m,y:-m,width:s.width+2*m,height:s.height+2*m});mask.append(element('rect',{x:-m,y:-m,width:s.width+2*m,height:s.height+2*m,fill:'white'}));
+   if(!s)return;svg.setAttribute('viewBox',`0 0 ${s.width} ${s.height}`);svg.replaceChildren();const metric=scale(),mx=metric.marginX,my=metric.marginY;
+   if(show){svg.append(element('rect',{x:-mx,y:-my,width:s.width+2*mx,height:s.height+2*my,fill:'transparent'}));const defs=element('defs',{}),mask=element('mask',{id:'stencil-material',maskUnits:'userSpaceOnUse',x:-mx,y:-my,width:s.width+2*mx,height:s.height+2*my});mask.append(element('rect',{x:-mx,y:-my,width:s.width+2*mx,height:s.height+2*my,fill:'white'}));
      if(result?.cutPath)mask.append(element('path',{d:result.cutPath,fill:'black','fill-rule':'evenodd'}));
      for(const b of plan.bridges.filter(b=>b.layer===plan.activeLayer&&b.enabled))mask.append(element('line',{x1:b.a.x,y1:b.a.y,x2:b.b.x,y2:b.b.y,stroke:'white','stroke-width':b.widthMm*metric.pxPerMm,'stroke-linecap':'round'}));defs.append(mask);svg.append(defs);
-     svg.append(element('rect',{x:-m,y:-m,width:s.width+2*m,height:s.height+2*m,fill:'#f2eee1',opacity:.83,mask:'url(#stencil-material)'}));
-     svg.append(element('rect',{x:-m,y:-m,width:s.width+2*m,height:s.height+2*m,fill:'none',stroke:'#64746b','stroke-width':1,'stroke-dasharray':'5 4','vector-effect':'non-scaling-stroke'}));
+     svg.append(element('rect',{x:-mx,y:-my,width:s.width+2*mx,height:s.height+2*my,fill:'#f2eee1',opacity:.83,mask:'url(#stencil-material)'}));
+     svg.append(element('rect',{x:-mx,y:-my,width:s.width+2*mx,height:s.height+2*my,fill:'none',stroke:'#64746b','stroke-width':1,'stroke-dasharray':'5 4','vector-effect':'non-scaling-stroke'}));
      for(const path of paths||[])if(!sheetLayers(plan).includes(path.treatment)&&visible(path.treatment))svg.append(element('path',{d:path.d,fill:path.treatment===-2?'#526577':`rgb(${s.palette[path.treatment]?.join(',')||'140,140,140'})`,opacity:.14,'fill-rule':'evenodd'}));
      if(result?.cutPath&&visible(plan.activeLayer))svg.append(element('path',{d:result.cutPath,fill:'none',stroke:'#239baf','stroke-width':1,'vector-effect':'non-scaling-stroke'}));
      const screenScale=outline.width/Math.max(1,outline.getBoundingClientRect().width);
@@ -77,7 +78,7 @@ export function setupStencil({read,repaint,onSave,beforeSheet,onAssignIsland}){
  function setLayer(value){cancel();$('bridge-auto-status').textContent='';plan.activeLayer=Number(value);selected=null;adding=false;activate();}
  function commit(before){if(history.commit({bridges:before,revision},{bridges:plan.bridges,revision})){schedule();save();}else{controls();paint();}}
  function edit(fn){const before=structuredClone(plan.bridges);fn();commit(before);}
- function point(e){const rect=outline.getBoundingClientRect(),s=read(),m=scale().margin;return {x:Math.max(-m,Math.min(s.width+m,(e.clientX-rect.left)*s.width/rect.width)),y:Math.max(-m,Math.min(s.height+m,(e.clientY-rect.top)*s.height/rect.height))};}
+ function point(e){const rect=outline.getBoundingClientRect(),s=read(),metric=scale(),mx=Math.max(0,metric.marginX),my=Math.max(0,metric.marginY);return {x:Math.max(-mx,Math.min(s.width+mx,(e.clientX-rect.left)*s.width/rect.width)),y:Math.max(-my,Math.min(s.height+my,(e.clientY-rect.top)*s.height/rect.height))};}
  function cancel(){if(autoBusy){stop();schedule();}if(drag){plan.bridges=drag.before;drag=null;}adding=false;controls();paint();}
  function undo(redo=false){cancel();const restored=redo?history.redo({bridges:plan.bridges,revision}):history.undo({bridges:plan.bridges,revision});if(restored){plan.bridges=restored.bridges;if(restored.revision!==revision)for(const b of plan.bridges)b.needsReview=true;selected=null;schedule();save();}}
  function pointerDown(e){
@@ -105,7 +106,7 @@ export function setupStencil({read,repaint,onSave,beforeSheet,onAssignIsland}){
  $('stencil-separate').addEventListener('click',()=>setIncludes([]));
  $('stencil-active').addEventListener('change',()=>setLayer($('stencil-active').value));
  $('stencil-islands').addEventListener('change',()=>{plan.showIslands=$('stencil-islands').checked;paint();save();});
- for(const [id,key,min,max] of [['stencil-size','longEdgeInches',1,100],['stencil-margin','marginMm',1,100]])$(id).addEventListener('change',()=>{plan[key]=Math.max(min,Math.min(max,Number($(id).value)||newStencilPlan()[key]));revision++;for(const b of plan.bridges)b.needsReview=true;schedule();save();});
+ for(const [id,key,min,max] of [['stencil-size','longEdgeInches',1,100]])$(id).addEventListener('change',()=>{plan[key]=Math.max(min,Math.min(max,Number($(id).value)||newStencilPlan()[key]));revision++;for(const b of plan.bridges)b.needsReview=true;schedule();save();});
  for(const [id,key,other] of [['bridge-auto-min','autoBridgeMinMm','autoBridgeMaxMm'],['bridge-auto-max','autoBridgeMaxMm','autoBridgeMinMm']])$(id).addEventListener('change',()=>{const input=Number($(id).value);plan[key]=Math.round(Math.max(.25,Math.min(25,Number.isFinite(input)&&input>0?input:newStencilPlan()[key]))*100)/100;if(key==='autoBridgeMinMm'&&plan[key]>plan[other]||key==='autoBridgeMaxMm'&&plan[key]<plan[other])plan[other]=plan[key];$(id).value=plan[key];$('bridge-auto-status').textContent='';if(autoBusy)schedule();else controls();save();});
  $('bridge-auto').addEventListener('click',()=>{cancel();$('bridge-auto-status').textContent='';analyze(true);});
  $('bridge-add').addEventListener('click',()=>{if(adding){cancel();selected=null;controls();paint();return;}plan.hiddenLayers=plan.hiddenLayers.filter(t=>t!==plan.activeLayer);$('tool-bridge').click();activate();selected=null;adding=true;controls();paint();});
@@ -124,10 +125,11 @@ export function setupStencil({read,repaint,onSave,beforeSheet,onAssignIsland}){
  $('layers-all').addEventListener('click',()=>{plan.hiddenLayers=[];layers();paint();repaint();save();});
  document.addEventListener('keydown',e=>{if(!mode()||document.querySelector('dialog[open]')||e.target.closest('input,select,textarea'))return;if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();undo(e.shiftKey);}else if(e.key==='Escape'){cancel();selected=null;paint();}else if(e.key==='Delete'||e.key==='Backspace'){if(chosen()){e.preventDefault();$('bridge-delete').click();}}});
  setupStencilPreview({prepare:()=>{cancel();beforeSheet();},read:()=>{const s=read();return s?{...s,plan:structuredClone(plan),paths,sheetPaths:paths?sheetPaths:{}}:null;}});
+ const exporter=setupStencilExport({prepare:()=>{cancel();beforeSheet();},read:()=>{const s=read();return s?{...s,plan:structuredClone(plan),paths,cachedCutPath:paths?sheetPaths[sheetLayers(plan).join(',')]:undefined}:null;}});
  return {visible,controls,invalidate,paint,
    snapshot:()=>structuredClone(plan),
    hide(){plan.showSheet=false;stop();cancel();paint();},
-   reset(){stop();adding=false;$('bridge-auto-status').textContent='';plan=newStencilPlan();revision=0;history=createBridgeHistory();paths=result=null;selected=null;selectedIsland=0;drag=null;layerSignature='';controls();paint();},
-   restore(saved){stop();adding=false;$('bridge-auto-status').textContent='';plan={...newStencilPlan(),...(saved?structuredClone(saved):{})};revision=0;history=createBridgeHistory();paths=result=null;selected=null;layerSignature='';controls();paint();if(plan.showSheet){beforeSheet();schedule();}}
+   reset(){exporter.reset();stop();adding=false;$('bridge-auto-status').textContent='';plan=newStencilPlan();revision=0;history=createBridgeHistory();paths=result=null;selected=null;selectedIsland=0;drag=null;layerSignature='';controls();paint();},
+   restore(saved){exporter.reset();stop();adding=false;$('bridge-auto-status').textContent='';plan={...newStencilPlan(),...(saved?structuredClone(saved):{})};revision=0;history=createBridgeHistory();paths=result=null;selected=null;layerSignature='';controls();paint();if(plan.showSheet){beforeSheet();schedule();}}
  };
 }

@@ -1,4 +1,15 @@
-export function sheetScale(width,height,longEdgeInches,marginMm=12.7){const pxPerMm=Math.max(width,height)/(longEdgeInches*25.4);return {pxPerMm,margin:marginMm*pxPerMm,widthInches:width/pxPerMm/25.4,heightInches:height/pxPerMm/25.4};}
+// Usable area supplied for the user's 24 × 12 inch Mylar and Cricut.
+// Keep artwork scale; center it on the largest working area without cutting a frame.
+export function sheetScale(width,height,longEdgeInches){
+ const pxPerMm=Math.max(width,height)/(longEdgeInches*25.4),landscape=width>=height;
+ const sheetWidthMm=landscape?590:290,sheetHeightMm=landscape?290:590;
+ const widthMm=width/pxPerMm,heightMm=height/pxPerMm;
+ const marginX=(sheetWidthMm-widthMm)*pxPerMm/2,marginY=(sheetHeightMm-heightMm)*pxPerMm/2;
+ return {pxPerMm,margin:Math.max(0,Math.min(marginX,marginY)),marginX,marginY,sheetWidthMm,sheetHeightMm,
+   fits:widthMm<=sheetWidthMm+1e-8&&heightMm<=sheetHeightMm+1e-8,
+   maxLongEdgeInches:Math.min(sheetWidthMm/width,sheetHeightMm/height)*Math.max(width,height)/25.4,
+   widthInches:widthMm/25.4,heightInches:heightMm/25.4};
+}
 export function pointSegmentDistance(p,a,b){const dx=b.x-a.x,dy=b.y-a.y,t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/(dx*dx+dy*dy||1)));return Math.hypot(p.x-a.x-t*dx,p.y-a.y-t*dy);}
 // The tracing module emits only M/L/Q/Z. Flatten curves for source-resolution analysis.
 export function rasterizeCutPath(d,width,height){
@@ -13,7 +24,8 @@ export function rasterizeCutPath(d,width,height){
 }
 export function analyzeSheet(baseCut,width,height,bridges,pxPerMm,margin){
  const cut=baseCut.slice(),bridgeStatus=[];
- const inSheet=p=>p.x>=-margin&&p.y>=-margin&&p.x<=width+margin&&p.y<=height+margin;
+ const mx=typeof margin==='object'?margin.marginX:margin,my=typeof margin==='object'?margin.marginY:margin;
+ const inSheet=p=>p.x>=-mx&&p.y>=-my&&p.x<=width+mx&&p.y<=height+my;
  const retained=p=>inSheet(p)&&(p.x<0||p.y<0||p.x>=width||p.y>=height||!baseCut[Math.floor(p.y)*width+Math.floor(p.x)]);
  for(const bridge of bridges){
    if(!bridge.enabled){bridgeStatus.push({id:bridge.id,reason:'Disabled'});continue;}

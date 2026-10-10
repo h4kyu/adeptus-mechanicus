@@ -87,6 +87,7 @@
 </div></details>
 <details id="stencil-island" class="editor-island"><summary>Stencil &amp; bridges</summary><div class="island-content">
 <button id="stencil-preview-open">Preview sheets &amp; bleach result</button>
+<button id="stencil-export-open">Export active sheet SVG</button>
 <label for="stencil-active">Active sheet</label><select id="stencil-active"></select>
 <details class="tool-details"><summary>Layer overlap</summary>
 <p class="muted">Also cut these layers on this sheet. Their own sheets stay independent.</p>
@@ -95,7 +96,7 @@
 <label class="check"><input id="stencil-show" type="checkbox"> Show active stencil</label>
 <details class="tool-details"><summary>Finished size</summary>
 <label for="stencil-size">Artwork long edge (inches)</label><input id="stencil-size" type="number" min="1" max="100" step="0.5" value="15">
-<label for="stencil-margin">Surrounding sheet margin (mm)</label><input id="stencil-margin" type="number" min="1" max="100" step="0.5" value="12.7">
+<p class="muted">24 × 12 in Mylar · 29 × 59 cm working area, oriented to the artwork. Keep the full sheet for shielding. No outer border is cut.</p>
 <p id="stencil-dimensions" class="muted"></p></details>
 <label class="check"><input id="stencil-islands" type="checkbox" checked> Highlight disconnected islands</label>
 <p id="stencil-status" class="muted" role="status"></p>
@@ -135,6 +136,15 @@
 <dialog id="discard-dialog" aria-labelledby="discard-title"><form method="dialog"><h2 id="discard-title">Discard manual assignments?</h2><p>This clears your assignments and undo history. Your original image stays untouched. This reset will be saved automatically.</p><div class="edit-actions"><button value="cancel" autofocus>Keep editing</button><button value="discard">Discard assignments</button></div></form></dialog>
 <dialog id="project-library" aria-labelledby="library-title"><div class="library-heading"><div><p class="eyebrow">STENCIL STUDIO</p><h2 id="library-title">Your projects</h2></div><button id="library-close" aria-label="Close project library">×</button></div><p class="muted">Saved as files in stencil-app/projects/ in this repo. Export a project for an extra backup.</p><div class="library-actions"><button id="library-new">New project</button><button id="library-import">Import project</button><button id="library-sample">Try a sample</button></div><button id="library-migrate" class="text-button">Copy browser projects to repo</button><p id="migration-status" class="muted" role="status"></p><input id="project-import" type="file" accept=".json,.stencil" hidden><p id="project-error" role="alert"></p><p id="project-empty" class="muted">No projects yet. Start with an image or try the sample.</p><div id="project-grid"></div></dialog>
 <dialog id="project-dialog" aria-labelledby="project-dialog-title"><form method="dialog"><h2 id="project-dialog-title"></h2><p id="project-dialog-message"></p><label id="project-name-label" for="project-name">Project name<input id="project-name" maxlength="200" autocomplete="off"></label><div class="edit-actions"><button value="cancel" formnovalidate>Cancel</button><button id="project-dialog-action" value="accept">Save name</button></div></form></dialog>
+<dialog id="stencil-export" aria-labelledby="export-title">
+<div class="preview-heading"><h2 id="export-title">Export active sheet</h2><button id="export-close" aria-label="Close SVG export">×</button></div>
+<p id="export-status" role="status" aria-live="polite"></p>
+<div id="export-stage"><svg id="export-art" xmlns="http://www.w3.org/2000/svg" aria-label="Exported sheet geometry"></svg></div>
+<p id="export-size"></p><ul id="export-warnings"></ul>
+<p id="export-placement" class="muted"></p><p class="muted">Pale areas stay as Mylar; dark openings are removed. The SVG cuts only openings, with no outer border. Keep your full 24 × 12 in Mylar for shielding; the preview shows the 29 × 59 cm working area. If Design Space crops empty SVG space, verify the cut outline size and placement above on the mat preview. Keep the compound shape together. Import alignment still needs verification.</p>
+<p class="muted">Small-detail checks are limited; narrow necks and material strength still need inspection. Make a small test cut before cutting the full stencil.</p>
+<a id="export-download" aria-disabled="true" tabindex="-1">Download SVG</a>
+</dialog>
 <dialog id="stencil-preview" aria-labelledby="preview-title">
 <div class="preview-heading"><h2 id="preview-title">Stencil preview</h2><button id="preview-close" aria-label="Close preview">Back to editor</button></div>
 <div class="preview-toolbar"><div class="preview-modes"><button id="preview-sheet-mode" aria-pressed="true">Mylar sheets</button><button id="preview-bleach-mode" aria-pressed="false">Bleached result</button></div>

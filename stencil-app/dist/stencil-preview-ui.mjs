@@ -11,7 +11,7 @@ export function setupStencilPreview({read,prepare}){
    if(!data)return;const layer=Number($('preview-layer').value),rendered=previewSvg(data,{mode,layer,enabled});svg.setAttribute('viewBox',rendered.viewBox);svg.innerHTML=rendered.body;
    const sheet=data.sheets.find(s=>s.layer===layer);
    $('preview-note').textContent=mode==='sheet'?`Intensity ${layer} · cuts ${sheet?.members.join(' + ')||layer}. Pale material is Mylar; dark areas are cut out. Bridges are part of the sheet.`:'Illustrative bleach on dark fabric. The strongest visible pass wins in overlaps; bridges block their own pass. Actual color depends on fabric and application.';
-   const scale=data.scale;$('preview-size').textContent=mode==='sheet'?`Sheet ${(scale.widthInches+scale.margin/scale.pxPerMm/12.7).toFixed(2)} × ${(scale.heightInches+scale.margin/scale.pxPerMm/12.7).toFixed(2)} in`:`Artwork ${scale.widthInches.toFixed(2)} × ${scale.heightInches.toFixed(2)} in`;
+   const scale=data.scale;$('preview-size').textContent=mode==='sheet'?`Working area ${scale.sheetWidthMm} × ${scale.sheetHeightMm} mm${scale.fits?'':' · Artwork exceeds area'}`:`Artwork ${scale.widthInches.toFixed(2)} × ${scale.heightInches.toFixed(2)} in`;
  }
  function open(){
    prepare();const source=read();if(!source)return;stop();data=null;svg.replaceChildren();$('preview-passes').replaceChildren();$('preview-layer').replaceChildren();$('preview-size').textContent='';$('preview-note').textContent='';$('preview-status').textContent='Building previews…';dialog.showModal();fit();paint();const current=generation;

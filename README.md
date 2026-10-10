@@ -1,6 +1,6 @@
 # Stencil region inspector
 
-Current stage: full-resolution color/grayscale segmentation, optional smoothing and small-region cleanup, and interactive comparison. Manual group assignment is available in the Assign workspace, with a local project library, autosave and portable project backups. Stencil export is planned. See [the current plan and project memory](docs/STENCIL_EDITOR_PLAN.md); the sections below also retain historical implementation notes.
+Current stage: full-resolution color/grayscale segmentation, optional smoothing and small-region cleanup, and interactive comparison. Manual group assignment is available in the Assign workspace, with a local project library, autosave and portable project backups. Active-sheet SVG export includes smoothed boundaries, overlap, physical sizing and retained bridges; Cricut import validation is still pending. See [the current plan and project memory](docs/STENCIL_EDITOR_PLAN.md); the sections below also retain historical implementation notes.
 
 ## Run
 
@@ -129,3 +129,12 @@ Unassigned pixels have a subtle dotted hint; assigned regions have treatment tin
 ### Assigned group selection
 
 Clicking an assigned region highlights every region with the same treatment, including disconnected pieces. Touching regions in that treatment no longer show internal boundaries. Unassigned regions retain their own boundaries and individual selection. Reassign or **Clear group assignment** affects the whole selected treatment in one undo step. Original segmentation remains intact so undo, clearing and reopening can restore the appropriate boundaries.
+
+## Export an active stencil sheet
+
+1. In **Stencil & bridges**, select the active intensity and confirm **Finished size** fits the 29 × 59 cm working area. The artwork is centered; your full 24 × 12 inch Mylar stays intact.
+2. Choose **Export active sheet SVG**. Review the final geometry, dimensions and any island/bridge notes.
+3. Select **Download SVG**, then upload it as a cut image in Cricut Design Space.
+4. Verify the imported width and height against the export panel, confirm the sheet fits your machine/mat's usable cut area, and inspect the bridges before a small test cut. Repeat for each active sheet.
+
+The SVG cuts **only the stencil openings, with no outer sheet border**. Keep the compound shape together in Design Space. If import crops blank SVG space, use the review’s cut-outline size and top-left offsets from a common working-area origin to align all sheets; do not center each layer separately. Bridges are built into the outlines; the file uses no preview masks or embedded images. Export does not modify the saved artwork. Small-detail checks do not measure every narrow neck or certify cutability. Actual Design Space import and physical cutting remain to be validated; automatic tiling and batch export are not included.
