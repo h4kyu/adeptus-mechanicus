@@ -1,11 +1,12 @@
+import {setupPreserve} from './preserve-ui.mjs';
 import { createViewport } from './viewport.mjs?v=compact-4';
 import { setupAssign } from './assign-ui.mjs?v=compact-4';
 import { createRenderer } from './render.mjs';
 import {setupProjects} from './project-ui.mjs';
-let projects;
+let projects,preserve;
 const $ = id => document.getElementById(id);
 const assignment=setupAssign(edited=>{
-  $('detection-controls').disabled=edited;$('edit-lock').hidden=!edited;projects?.changed();
+  $('detection-controls').disabled=edited;preserve?.refresh();$('edit-lock').hidden=!edited;projects?.changed();
 });
 async function confirmReset(){
   if(!assignment.edited)return true;
@@ -39,6 +40,7 @@ function switchInspection(side) {
 
 
 function syncControls() {
+  preserve?.refresh();
   $('min-size').disabled=!$('min-size-enabled').checked;
   const quant = $('mode').value === 'quantized';
   const gray=quant && $('color-space').value==='grayscale';
@@ -98,10 +100,10 @@ function compute() {
       if (data.error) { fail(data.error); return; }
       result = data; $('error').textContent = ''; buildSmoothedView(); renderPalette();
       $('status').textContent = `${data.regions.length.toLocaleString()} areas · ${data.ignoredPixels.toLocaleString()} pixels in filtered-out regions`;
-      assignment.update({source,base,result});draw(); worker.terminate();document.dispatchEvent(new Event('segmentation-ready'));projects?.changed();
+      assignment.update({source,base,result});preserve.refresh();draw(); worker.terminate();document.dispatchEvent(new Event('segmentation-ready'));projects?.changed();
     };
     worker.postMessage({revision:current, pixels:source.data, width:source.width, height:source.height,
-      options:{cleanup:$('cleanup').checked,cleanupSize:Number($('cleanup-size').value),colorSpace:$('color-space').value,smoothing:$('smoothing').checked, smoothRadius:Number($('smooth-radius').value), smoothStrength:Number($('smooth-strength').value)/100, mode:$('mode').value, colorCount:Number($('color-count').value), tolerance:Number($('tolerance').value)/100,
+      options:{preservedShapes:preserve.snapshot(),cleanup:$('cleanup').checked,cleanupSize:Number($('cleanup-size').value),colorSpace:$('color-space').value,smoothing:$('smoothing').checked, smoothRadius:Number($('smooth-radius').value), smoothStrength:Number($('smooth-strength').value)/100, mode:$('mode').value, colorCount:Number($('color-count').value), tolerance:Number($('tolerance').value)/100,
         backgroundMode:$('background-mode').value, background:[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)),
         alphaCutoff:Number($('alpha').value)/100, minSize}});
     }catch(error){fail(error.message);}
@@ -187,7 +189,7 @@ function point(event) {
 function updateZoom(){camera.preset($('zoom').value);}
 async function setSource(image,name,request=++uploadRevision) {
   await projects.flush();if(request!==uploadRevision)return;
-  assignment.reset();
+  assignment.reset();preserve.restore();
   applySettings(defaultSettings);setStage('prepare');
   const w=image.naturalWidth||image.width, h=image.naturalHeight||image.height;
   canvas.width=w; canvas.height=h;
@@ -287,6 +289,8 @@ document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!document.q
 $('reset-assignments').addEventListener('click',async()=>{if(await confirmReset())assignment.reset();});
 
 const camera=createViewport(()=>projects?.changed());
+preserve=setupPreserve({source:()=>source,locked:()=>assignment.edited,recompute:compute,result:()=>result,historyChanged:()=>assignment.historyControls()});
+assignment.setPrepareHistory(preserve);
 const settingIds=['mode','color-space','color-count','cleanup','cleanup-size','smoothing','smooth-radius','smooth-strength','background-mode','background','tolerance','alpha','min-size','min-size-enabled','outlines','show-palette','compare','overlay-opacity','show-original','assignment-hints','refine-minimum','refine-scope','boundary-tolerance','boundary-corners'];
 function readSettings(){return Object.fromEntries(settingIds.map(id=>[id,id==='min-size'?String(committedMinimum):id==='cleanup-size'?String(committedCleanup):$(id).type==='checkbox'?$(id).checked:$(id).value]));}
 const defaultSettings=readSettings();
@@ -311,11 +315,11 @@ function ready(){if(result)return Promise.resolve();if($('status').textContent==
 let thumbnailSource,thumbnailData;
 function thumbnail(image){if(image===thumbnailSource)return thumbnailData;const c=document.createElement('canvas'),scale=Math.min(1,240/image.width,160/image.height);c.width=Math.max(1,Math.round(image.width*scale));c.height=Math.max(1,Math.round(image.height*scale));const full=document.createElement('canvas');full.width=image.width;full.height=image.height;full.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(image.data),image.width,image.height),0,0);c.getContext('2d').drawImage(full,0,0,c.width,c.height);thumbnailSource=image;thumbnailData=c.toDataURL('image/png');return thumbnailData;}
 projects=setupProjects({sample,validateSettings,thumbnail,
-  async snapshot(){await ready();return {source:{width:source.width,height:source.height,data:source.data},result,assignments:assignment.snapshot(),pixelAssignments:assignment.pixelSnapshot(),boundaryRefinement:assignment.boundarySnapshot(),stencilPlan:assignment.stencilSnapshot(),settings:readSettings(),filename:$('filename').textContent,thumbnail:thumbnail(source),view:{stage:document.body.dataset.stage,camera:camera.snapshot(),hiddenLayers:[...hiddenLayers],inspectSide,selected,selectedLayer,sideStates:Object.fromEntries(Object.entries(sideStates).map(([key,value])=>[key,{...value,hiddenLayers:[...value.hiddenLayers]}]))}};},
+  async snapshot(){await ready();return {preservedShapes:preserve.snapshot(),source:{width:source.width,height:source.height,data:source.data},result,assignments:assignment.snapshot(),pixelAssignments:assignment.pixelSnapshot(),boundaryRefinement:assignment.boundarySnapshot(),stencilPlan:assignment.stencilSnapshot(),settings:readSettings(),filename:$('filename').textContent,thumbnail:thumbnail(source),view:{stage:document.body.dataset.stage,camera:camera.snapshot(),hiddenLayers:[...hiddenLayers],inspectSide,selected,selectedLayer,sideStates:Object.fromEntries(Object.entries(sideStates).map(([key,value])=>[key,{...value,hiddenLayers:[...value.hiddenLayers]}]))}};},
   async restore(p){
     validateSettings(p.settings);clearTimeout(timer);worker?.terminate();revision++;uploadRevision++;cancelPick();
     canvas.width=p.source.width;canvas.height=p.source.height;source=new ImageData(new Uint8ClampedArray(p.source.data),canvas.width,canvas.height);buildBase();result=p.result;smoothedBase=preparedBase=null;buildSmoothedView();
-    applySettings(p.settings);inspectSide=p.view.inspectSide==='before'?'before':'after';$('inspect-side').value=inspectSide;
+    preserve.restore(p.preservedShapes);applySettings(p.settings);inspectSide=p.view.inspectSide==='before'?'before':'after';$('inspect-side').value=inspectSide;
     const state=(v={})=>({hiddenLayers:new Set(Array.isArray(v.hiddenLayers)?v.hiddenLayers.filter(x=>Number.isInteger(x)&&x>=0&&x<8):[]),selected:Number.isInteger(v.selected)?v.selected:-1,selectedLayer:Number.isInteger(v.selectedLayer)?v.selectedLayer:-1});
     ({hiddenLayers,selected,selectedLayer}=state(p.view));sideStates={before:state(p.view.sideStates?.before),after:state(p.view.sideStates?.after)};hover=-1;
     assignment.update({source,base,result});assignment.restore(p.assignments,p.pixelAssignments,p.boundaryRefinement,p.stencilPlan);$('filename').textContent=typeof p.filename==='string'?p.filename:p.name;
@@ -323,6 +327,6 @@ projects=setupProjects({sample,validateSettings,thumbnail,
     $('status').textContent=`${result.regions.length.toLocaleString()} areas · ${result.ignoredPixels.toLocaleString()} pixels in filtered-out regions`;
     document.body.classList.remove('no-project');setStage(p.view.stage==='assign'?'assign':'prepare');renderPalette();draw();camera.restore(p.view.camera);
   },
-  clear(){clearTimeout(timer);worker?.terminate();revision++;uploadRevision++;source=base=result=thumbnailSource=thumbnailData=null;assignment.update({source:{width:1,height:1},base:new Uint8ClampedArray(4),result:null});document.body.classList.add('no-project');$('filename').textContent='';$('dimensions').textContent='';$('status').textContent='';}
+  clear(){clearTimeout(timer);worker?.terminate();revision++;uploadRevision++;preserve.restore();source=base=result=thumbnailSource=thumbnailData=null;assignment.update({source:{width:1,height:1},base:new Uint8ClampedArray(4),result:null});document.body.classList.add('no-project');$('filename').textContent='';$('dimensions').textContent='';$('status').textContent='';}
 });
 syncControls();document.body.classList.add('no-project');projects.start();

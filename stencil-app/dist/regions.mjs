@@ -23,6 +23,7 @@ export function detectRegions(data, width, height, options = {}) {
     if (labels[seed] !== -1) continue;
     const rawId = nextLabel++, p = seed * 4;
     let head = 0, tail = 1, minX = width, maxX = 0, minY = height, maxY = 0;
+    let protectedRegion=false;
     queue[0] = seed; labels[seed] = rawId;
     const visit = j => {
       if (labels[j] !== -1) return;
@@ -37,13 +38,14 @@ export function detectRegions(data, width, height, options = {}) {
       if (match) { labels[j] = rawId; queue[tail++] = j; }
     };
     while (head < tail) {
-      const i = queue[head++], x = i % width, y = Math.floor(i / width);
+      const i = queue[head++];if(options.protectedPixels?.[i])protectedRegion=true;
+      const x = i % width, y = Math.floor(i / width);
       minX = Math.min(minX,x); maxX = Math.max(maxX,x);
       minY = Math.min(minY,y); maxY = Math.max(maxY,y);
       if (x > 0) visit(i-1); if (x+1 < width) visit(i+1);
       if (y > 0) visit(i-width); if (y+1 < height) visit(i+width);
     }
-    if (tail >= minSize) regions.push({rawId, area:tail, bounds:[minX,minY,maxX,maxY],
+    if (tail >= minSize || protectedRegion || options.protectedGroups?.has(colorLabels?.[seed])) regions.push({rawId, area:tail, bounds:[minX,minY,maxX,maxY],
       paletteIndex: mode === 'quantized' ? colorLabels[seed] : null,
       kind: mode === 'quantized' ? (colorLabels[seed] < 0 ? 'Transparent' : `Palette ${colorLabels[seed]+1}`) : mode === 'silhouette' ? (classes[seed] ? 'Foreground' : 'Background') : 'Color area'});
   }

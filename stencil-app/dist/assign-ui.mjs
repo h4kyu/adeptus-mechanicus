@@ -8,6 +8,7 @@ import {setupStencil} from './stencil-ui.mjs';
 import {collectBrushRegions} from './group-brush.mjs';
 export function setupAssign(onChange) {
   const $=id=>document.getElementById(id), original=$('assign-original'),overlay=$('assign-overlay'),outline=$('assign-outline'),boundaries=$('assign-boundaries'),quantized=$('assign-quantized'),hints=$('assign-hints'),viewport=$('canvas-viewport'),cursor=$('brush-cursor');
+  let prepareHistory=null;
   let snapshot=null,model=createPixelAssignments(),selected=-1,selectedTreatment=null,individual=false,brushTarget=1,stroke=null,displayEdges=null,lasso=null,mask=null,maskCount=0,available=new Uint8Array();
   const brushMode=()=>viewport.dataset.tool==='brush';
   const lassoMode=()=>viewport.dataset.tool==='lasso';
@@ -48,12 +49,16 @@ export function setupAssign(onChange) {
   const grouped=()=>!individual&&selectedTreatment!==null&&selectedTreatment!==UNASSIGNED;
   const includes=i=>mask?!!mask[i]:grouped()?model.at(i)===selectedTreatment:selected>=0&&snapshot.result.labels[i]===selected&&(individual||model.at(i)===UNASSIGNED);
   function edges(){return displayEdges??=assignmentEdges(snapshot.result.labels,model.values,outline.width,outline.height,snapshot.source.data,cleanup.labels||model.overrides);}
+  function historyControls(){
+    const history=!model.edited&&prepareHistory?prepareHistory:model;
+    $('assign-undo').disabled=!history.canUndo;$('assign-redo').disabled=!history.canRedo;
+  }
   function controls() {
     const r=snapshot?.result?.regions[selected],value=selectedTreatment,editable=palette().length>0&&(grouped()||!!r&&model.automatic[selected]>=0);
     const treatment=value===UNBLEACHED?'Unbleached':`Intensity ${value}`;
     $('assign-selection').textContent=mask?`Lasso · ${maskCount.toLocaleString()} pixels`:lasso?'Drawing lasso…':grouped()?`${treatment} · all matching pixels`:r?`${individual?'Individual region · ':''}Area ${selected+1} · ${r.area.toLocaleString()} pixels`:!snapshot?.result?'Computing regions…':palette().length?'No area selected':'Assignment requires Quantized mode.';
     document.querySelectorAll('[data-bucket]').forEach(button=>{button.disabled=!palette().length||(brushMode()? !snapshot?.result:mask? !maskCount:lassoMode()? true:!editable);button.setAttribute('aria-pressed',String((brushMode()?brushTarget:!mask?value:null)===Number(button.dataset.bucket)));});
-    $('assign-undo').disabled=!model.canUndo;$('assign-redo').disabled=!model.canRedo;
+    historyControls();
     let assigned=0;if(snapshot?.result)for(let i=0;i<snapshot.result.labels.length;i++)if(snapshot.source.data[i*4+3]&&model.at(i)!==UNASSIGNED)assigned++;
     $('assign-restore').textContent=grouped()?'Clear group assignment':'Clear assignment';
     $('assign-restore').disabled=mask?!maskCount:lassoMode()||!editable;
@@ -182,7 +187,7 @@ export function setupAssign(onChange) {
     lasso.pointer=null;if(lasso.dragged){lasso.points.push(imagePoint(e));finishLasso();}
   });
   $('lasso-finish').addEventListener('click',finishLasso);
-  function history(redo=false){cancelStroke();if(redo?model.redo():model.undo()){deselect();changed();}}
+  function history(redo=false){cancelStroke();if(!model.edited&&prepareHistory){redo?prepareHistory.redo():prepareHistory.undo();historyControls();return;}if(redo?model.redo():model.undo()){deselect();changed();}}
   $('assign-undo').addEventListener('click',()=>history());
   $('assign-redo').addEventListener('click',()=>history(true));
   $('assign-clear').addEventListener('click',deselect);
@@ -217,13 +222,15 @@ export function setupAssign(onChange) {
     selected=id;selectedTreatment=model.at(i);individual=true;paintSelection();controls();event.preventDefault();
   });
   document.addEventListener('keydown',event=>{
-    if(document.querySelector('dialog[open]')||/INPUT|SELECT|TEXTAREA/.test(event.target.tagName))return;
+    if(document.querySelector('dialog[open]')||/INPUT|TEXTAREA/.test(event.target.tagName)||event.target.isContentEditable)return;
     if(viewport.dataset.tool==='bridge')return;
     if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='z'){event.preventDefault();history(event.shiftKey);}
+    if(viewport.dataset.tool==='preserve'||event.target.tagName==='SELECT')return;
     if(event.key==='Enter'&&lassoMode()&&lasso){event.preventDefault();finishLasso();}
     if(event.key==='Escape'){smoothing.hide();cleanup.clear();cancelStroke();deselect();showOriginal(false);}
   });
   return {
+    historyControls,setPrepareHistory(provider){prepareHistory=provider;historyControls();},
     boundaries:paintBoundaries,
     hints:paintHints,
     get edited(){return model.edited;},

@@ -1,11 +1,12 @@
 import {detectRegions} from './regions.mjs';
 
 // Region adjacency graph: edge weights count shared pixel sides, not corners.
-export function mergeSmallRegions(pixels, width, height, colorLabels, minimum=20) {
+export function mergeSmallRegions(pixels, width, height, colorLabels, minimum=20, protectedGroups=new Set(),protectedPixels=null) {
   const limit=Math.max(1,Math.round(minimum)||1);
   const detected=detectRegions(pixels,width,height,{mode:'quantized',colorLabels,minSize:1});
   const nodes=detected.regions.map(r=>({area:r.area,color:r.paletteIndex,parent:r.id,neighbors:new Map()}));
   const labels=detected.labels, heap=[];
+  if(protectedPixels)for(let i=0;i<labels.length;i++)if(protectedPixels[i])nodes[labels[i]].protected=true;
   const less=(a,b)=>a.area<b.area || (a.area===b.area && a.id<b.id);
   function push(id) {
     const n=nodes[id];if(n.color<0 || n.area>=limit)return;
@@ -19,7 +20,7 @@ export function mergeSmallRegions(pixels, width, height, colorLabels, minimum=20
     heap[i]=last;return first;
   }
   function connect(a,b) {
-    if(a===b || nodes[a].color<0 || nodes[b].color<0)return;
+    if(a===b || nodes[a].color<0 || nodes[b].color<0 || protectedGroups.has(nodes[a].color) || protectedGroups.has(nodes[b].color) || nodes[a].protected || nodes[b].protected)return;
     nodes[a].neighbors.set(b,(nodes[a].neighbors.get(b)||0)+1);
     nodes[b].neighbors.set(a,(nodes[b].neighbors.get(a)||0)+1);
   }
