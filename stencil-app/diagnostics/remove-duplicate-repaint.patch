@@ -1,0 +1,24 @@
+--- a/stencil-app/dist/assignment-cleanup-ui.mjs
++++ b/stencil-app/dist/assignment-cleanup-ui.mjs
+@@ -8,8 +8,8 @@
+     $('refine-cancel').disabled=!result&&!worker;
+     $('refine-show-row').hidden=!result?.changedPixels;
+   }
+-  function clear(message=''){
+-    generation++;worker?.terminate();worker=null;result=null;$('refine-status').textContent=message;controls();repaint();
++  function clear(message='',{repaintNow=true}={}){
++    generation++;worker?.terminate();worker=null;result=null;$('refine-status').textContent=message;controls();if(repaintNow)repaint();
+   }
+   function minimum(){const input=$('refine-minimum');input.value=Math.min(1000000,Math.max(1,Math.round(Number(input.value))||20));return Number(input.value);}
+   $('refine-minimum').addEventListener('change',()=>{minimum();clear('Settings changed. Preview cleanup again.');});
+--- a/stencil-app/dist/assign-ui.mjs
++++ b/stencil-app/dist/assign-ui.mjs
+@@ -148,7 +148,7 @@
+     }
+   }
+   function changed(){
+-    stencil.invalidate();smoothing.invalidate();cleanup.clear();displayEdges=null;available=new Uint8Array(model.values.length);
++    stencil.invalidate();smoothing.invalidate();cleanup.clear('',{repaintNow:false});displayEdges=null;available=new Uint8Array(model.values.length);
+     if(snapshot?.result)for(let i=0;i<snapshot.result.labels.length;i++)if(model.at(i)===UNASSIGNED&&snapshot.source.data[i*4+3]&&snapshot.result.labels[i]>=0)available[snapshot.result.labels[i]]=1;
+     paintOverlay();paintHints();paintBoundaries();paintSelection();controls();onChange(model.edited);
+   }
