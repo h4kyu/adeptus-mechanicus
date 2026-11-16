@@ -1,6 +1,7 @@
-import {createBrowserProjectStore,createProjectStore,encodeProject,decodeProject,validateProject,PROJECT_VERSION} from './projects.mjs';
+import {createBrowserProjectStore,createProjectStore,PROJECT_VERSION} from './projects.mjs';
+import {createProjectCodec} from './project-codec-client.mjs';
 export function setupProjects(editor) {
-  const $=id=>document.getElementById(id),store=createProjectStore();
+  const $=id=>document.getElementById(id),codec=createProjectCodec(),store=createProjectStore({codec});
   let current=null,dirty=0,saved=0,timer,running=null,restoring=false,busy=false,lastError='';
   const library=$('project-library');
   function error(e){const message=`${e.message || 'Project operation failed.'}${current?' Your open project is still available; export it for a backup.':''}`;lastError=message;$('project-error').textContent=message;$('error').textContent=message;}
@@ -15,7 +16,7 @@ export function setupProjects(editor) {
   }
   async function act(fn){if(busy)return;busy=true;document.querySelector('.project-menu').open=false;$('project-error').textContent='';try{await fn();}catch(e){error(e);}finally{busy=false;}}
   function created(name){document.querySelector('.project-menu').open=false;current={id:crypto.randomUUID(),name:name.replace(/\.[^.]+$/,'').slice(0,200)||'Untitled project',createdAt:Date.now()};dirty=0;saved=0;title();$('library-close').hidden=false;library.close();changed();}
-  async function open(id){await flush();const p=await store.get(id);if(!p)throw Error('This project is no longer in the library.');validateProject(p);restoring=true;try{await editor.restore(p);current={id:p.id,name:p.name,createdAt:p.createdAt,updatedAt:p.updatedAt};dirty=saved=0;title();status('Saved in repo');library.close();}finally{restoring=false;}}
+  async function open(id){await flush();const p=await store.get(id);if(!p)throw Error('This project is no longer in the library.');restoring=true;try{await editor.restore(p);current={id:p.id,name:p.name,createdAt:p.createdAt,updatedAt:p.updatedAt};dirty=saved=0;title();status('Saved in repo');library.close();}finally{restoring=false;}}
   async function ask({title,message,value,action}) {
     const dialog=$('project-dialog');dialog.returnValue='cancel';$('project-dialog-title').textContent=title;$('project-dialog-message').textContent=message;
     $('project-name-label').hidden=value===undefined;$('project-name').value=value||'';$('project-name').required=value!==undefined;$('project-dialog-action').textContent=action;
@@ -51,13 +52,13 @@ export function setupProjects(editor) {
   $('project-rename').addEventListener('click',()=>act(()=>rename(current.id)));
   $('project-retry').addEventListener('click',()=>act(async()=>{await flush();if(library.open)await list();}));
   $('project-export').addEventListener('click',()=>act(async()=>{
-    const p=await snapshot(),blob=new Blob([encodeProject(p)],{type:'application/json'}),url=URL.createObjectURL(blob),link=document.createElement('a');
+    const p=await snapshot(),blob=new Blob([await codec.encode(p)],{type:'application/json'}),url=URL.createObjectURL(blob),link=document.createElement('a');
     link.href=url;link.download=p.name.replace(/[^a-z0-9 _-]/gi,'_')+'.stencil.json';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);
   }));
   $('library-migrate').addEventListener('click',()=>act(async()=>{
     await flush();const browserStore=createBrowserProjectStore();let copied=0,skipped=0;
     for(const item of await browserStore.list()){
-      const project=await browserStore.get(item.id);validateProject(project);editor.validateSettings(project.settings);
+      const project=await browserStore.get(item.id);editor.validateSettings(project.settings);
       const result=await store.put(project,{createOnly:true});if(result.created===false)skipped++;else copied++;
     }
     await list();$('migration-status').textContent=`${copied} copied to the repo${skipped?`, ${skipped} already present`:''}. Browser copies kept.`;
@@ -65,7 +66,7 @@ export function setupProjects(editor) {
   $('library-import').addEventListener('click',()=>$('project-import').click());
   $('menu-import').addEventListener('click',()=>$('project-import').click());
   $('project-import').addEventListener('change',e=>{const file=e.target.files[0];e.target.value='';if(!file)return;act(async()=>{
-    const p=decodeProject(await file.text());editor.validateSettings(p.settings);await flush();p.id=crypto.randomUUID();p.createdAt=p.updatedAt=Date.now();p.thumbnail=editor.thumbnail(p.source);await store.put(p);await open(p.id);
+    const p=await codec.decode(await file.text());editor.validateSettings(p.settings);await flush();p.id=crypto.randomUUID();p.createdAt=p.updatedAt=Date.now();p.thumbnail=editor.thumbnail(p.source);await store.put(p);await open(p.id);
   });});
   document.addEventListener('input',e=>{if(e.target.type!=='number'&&e.target.closest('#editor-panels'))changed();});
   document.addEventListener('change',e=>{if(e.target.closest('#editor-panels'))changed();});

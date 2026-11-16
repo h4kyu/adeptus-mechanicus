@@ -8,17 +8,19 @@ export function setupStencilPreview({read,prepare}){
  function paint(){
    $('preview-sheet-mode').setAttribute('aria-pressed',String(mode==='sheet'));$('preview-bleach-mode').setAttribute('aria-pressed',String(mode==='bleach'));
    $('preview-sheet-controls').hidden=mode!=='sheet';$('preview-passes').hidden=mode!=='bleach';
-   if(!data)return;const layer=Number($('preview-layer').value),rendered=previewSvg(data,{mode,layer,enabled});svg.setAttribute('viewBox',rendered.viewBox);svg.innerHTML=rendered.body;
+   if(!data)return;const layer=Number($('preview-layer').value),piece=Number($('preview-piece').value),rendered=previewSvg(data,{mode,layer,piece,enabled});svg.setAttribute('viewBox',rendered.viewBox);svg.innerHTML=rendered.body;
    const sheet=data.sheets.find(s=>s.layer===layer);
-   $('preview-note').textContent=mode==='sheet'?`Intensity ${layer} · cuts ${sheet?.members.join(' + ')||layer}. Pale material is Mylar; dark areas are cut out. Bridges are part of the sheet.`:'Illustrative bleach on dark fabric. The strongest visible pass wins in overlaps; bridges block their own pass. Actual color depends on fabric and application.';
+   $('preview-piece').hidden=data.scale.frames.length!==2;
+   $('preview-note').textContent=mode==='sheet'?`Intensity ${layer}${data.scale.frames.length===2?` · Piece ${piece===0?'A':'B'}`:''} · cuts ${sheet?.members.join(' + ')||layer}. Pale material is Mylar; dark areas are cut out. Bridges are part of the sheet.${data.scale.frames.length===2?' Align duplicated openings and tape both pieces together before spraying.':''}`:'Illustrative bleach on dark fabric. The strongest visible pass wins in overlaps; bridges block their own pass. Actual color depends on fabric and application.';
    const scale=data.scale;$('preview-size').textContent=mode==='sheet'?`Working area ${scale.sheetWidthMm} × ${scale.sheetHeightMm} mm${scale.fits?'':' · Artwork exceeds area'}`:`Artwork ${scale.widthInches.toFixed(2)} × ${scale.heightInches.toFixed(2)} in`;
+   if(scale.frames.length===2)$('preview-note').textContent+=scale.layout.trimJoin?' Manually trim the joining stock edges to the marked working-area boundaries before taping.':' The uncut joining stock borders remain; the bleach view includes their blocked bands.';
  }
  function open(){
    prepare();const source=read();if(!source)return;stop();data=null;svg.replaceChildren();$('preview-passes').replaceChildren();$('preview-layer').replaceChildren();$('preview-size').textContent='';$('preview-note').textContent='';$('preview-status').textContent='Building previews…';dialog.showModal();fit();paint();const current=generation;
    const n=source.width*source.height,treatments=new Int16Array(n),alpha=new Uint8Array(n);for(let i=0;i<n;i++){treatments[i]=source.at(i);alpha[i]=source.source[i*4+3];}
    try{worker=new Worker(new URL('./stencil-preview-worker.mjs',import.meta.url),{type:'module'});
      worker.onmessage=({data:result})=>{if(current!==generation||!dialog.open)return;worker.terminate();worker=null;if(result.error){$('preview-status').textContent=`Preview failed: ${result.error}`;return;}
-       data=result;enabled=data.sheets.map(s=>s.layer);$('preview-status').textContent=data.sheets.length?'':'Assign an intensity to preview its stencil.';
+       data=result;enabled=data.sheets.map(s=>s.layer);$('preview-piece').value=data.scale.activePiece;$('preview-status').textContent=data.sheets.length?'':'Assign an intensity to preview its stencil.';
        for(const sheet of data.sheets){const option=document.createElement('option');option.value=sheet.layer;option.textContent=`Intensity ${sheet.layer}${sheet.members.length>1?` · cuts ${sheet.members.join(' + ')}`:''}`;$('preview-layer').append(option);
          const label=document.createElement('label'),input=document.createElement('input');label.className='check';input.type='checkbox';input.checked=true;input.dataset.previewLayer=sheet.layer;label.append(input,document.createTextNode(`Intensity ${sheet.layer}`));$('preview-passes').append(label);}
        $('preview-layer').value=data.sheets.some(s=>s.layer===source.plan.activeLayer)?source.plan.activeLayer:data.sheets[0]?.layer||'';paint();
@@ -30,6 +32,7 @@ export function setupStencilPreview({read,prepare}){
  $('stencil-preview-open').addEventListener('click',open);$('preview-close').addEventListener('click',()=>dialog.close());dialog.addEventListener('close',()=>{stop();drag=null;});
  for(const [id,value] of [['preview-sheet-mode','sheet'],['preview-bleach-mode','bleach']])$(id).addEventListener('click',()=>{mode=value;fit();paint();});
  $('preview-layer').addEventListener('change',()=>{fit();paint();});
+ $('preview-piece').addEventListener('change',()=>{fit();paint();});
  for(const [id,step] of [['preview-prev',-1],['preview-next',1]])$(id).addEventListener('click',()=>{if(!data?.sheets.length)return;const select=$('preview-layer');select.selectedIndex=(select.selectedIndex+step+data.sheets.length)%data.sheets.length;fit();paint();});
  $('preview-passes').addEventListener('change',e=>{if(!e.target.matches('[data-preview-layer]'))return;const layer=Number(e.target.dataset.previewLayer);enabled=enabled.filter(v=>v!==layer);if(e.target.checked)enabled.push(layer);paint();});
  $('preview-fit').addEventListener('click',fit);

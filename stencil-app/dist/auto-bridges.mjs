@@ -11,8 +11,10 @@ export function suggestBridges(baseCut,width,height,analysis,pxPerMm,margin,widt
  // Anchor on original retained material, even when existing bridges have joined it.
  for(let i=0;i<n;i++)if(labels[i]>=0&&!baseCut[i])seed(i,labels[i],i);
  // Virtual frame sources support art whose openings run all the way to an edge.
- for(let x=0;x<width;x++){seed(x,0,-1-x);seed((height-1)*width+x,0,-1-width-x);}
- for(let y=0;y<height;y++){seed(y*width,0,-1-2*width-y);seed(y*width+width-1,0,-1-2*width-height-y);}
+ if(!analysis.physicalFrame){
+   for(let x=0;x<width;x++){seed(x,0,-1-x);seed((height-1)*width+x,0,-1-width-x);}
+   for(let y=0;y<height;y++){seed(y*width,0,-1-2*width-y);seed(y*width+width-1,0,-1-2*width-height-y);}
+ }
  const pairs=new Map(),inset=Math.min(.5,margin/2);
  function point(index){
    if(index>=0)return {x:index%width+.5,y:Math.floor(index/width)+.5};

@@ -1,23 +1,34 @@
 import {validateShapes,validateShapeBudget} from './preserved-shapes.mjs';
 import {validateStencilPlan} from './stencil-plan.mjs';
+import {createProjectCodec} from './project-codec-client.mjs';
 // Portable project files preserve typed arrays at full image resolution.
 export const PROJECT_VERSION=1;
 const types={Uint8Array,Uint8ClampedArray,Int16Array,Int32Array,Float32Array};
 export function encodeProject(project) {
   return JSON.stringify(project,(_key,value)=>{
     if(!ArrayBuffer.isView(value))return value;
-    const bytes=new Uint8Array(value.buffer,value.byteOffset,value.byteLength);let binary='';
+    const bytes=new Uint8Array(value.buffer,value.byteOffset,value.byteLength);
+    if(typeof bytes.toBase64==='function')return {$array:value.constructor.name,data:bytes.toBase64()};
+    let binary='';
     for(let i=0;i<bytes.length;i+=32768)binary+=String.fromCharCode(...bytes.subarray(i,i+32768));
     return {$array:value.constructor.name,data:btoa(binary)};
   });
 }
 export function decodeProject(text) {
-  const project=JSON.parse(text,(_key,value)=>{
-    if(!value?.$array)return value;
-    const Type=types[value.$array];if(!Type||typeof value.data!=='string')throw Error('Invalid project array.');
-    const bytes=Uint8Array.from(atob(value.data),c=>c.charCodeAt(0));
-    return new Type(bytes.buffer);
-  });
+  // Parse once, then restore binary wrappers without a callback for every byte.
+  function restore(value){
+    if(!value||typeof value!=='object')return value;
+    if(value.$array){
+      if(!Object.hasOwn(types,value.$array)||typeof value.data!=='string')throw Error('Invalid project array.');
+      // atob retains the existing format's strict base64 validation.
+      const binary=atob(value.data),bytes=new Uint8Array(binary.length);
+      for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+      return new types[value.$array](bytes.buffer);
+    }
+    for(const key of Object.keys(value))value[key]=restore(value[key]);
+    return value;
+  }
+  const project=restore(JSON.parse(text));
   validateProject(project);return project;
 }
 export function validateProject(p) {
@@ -74,7 +85,7 @@ export function createBrowserProjectStore(name='stencil-studio') {
 }
 
 // Autosave goes through the local server; never silently fall back to browser storage.
-export function createProjectStore() {
+export function createProjectStore({codec=createProjectCodec()}={}) {
   async function request(id='',options={}){
     let response;try{response=await fetch('/api/projects'+(id?'/'+encodeURIComponent(id):''),{...options,headers:{'X-Stencil-Client':'1',...options.headers}});}
     catch{throw Error('Cannot reach the project server. Run node stencil-app/server.mjs, then retry saving.');}
@@ -83,8 +94,8 @@ export function createProjectStore() {
   }
   return {
     list:async()=>{const response=await request();try{return await response.json();}catch{throw Error('Start the editor with node stencil-app/server.mjs to use repo storage.');}},
-    get:async id=>decodeProject(await (await request(id)).text()),
-    put:async(p,{createOnly=false}={})=>{validateProject(p);return (await request(p.id,{method:'PUT',headers:{'Content-Type':'application/json',...(createOnly?{'If-None-Match':'*'}:{})},body:encodeProject(p)})).json();},
+    get:async id=>codec.decode(await (await request(id)).text()),
+    put:async(p,{createOnly=false}={})=>{const id=p.id,body=await codec.encode(p);return (await request(id,{method:'PUT',headers:{'Content-Type':'application/json',...(createOnly?{'If-None-Match':'*'}:{})},body})).json();},
     delete:async id=>{await request(id,{method:'DELETE'});}
   };
 }

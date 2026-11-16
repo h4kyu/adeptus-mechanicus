@@ -2,15 +2,19 @@ import {setupStencilPreview} from './stencil-preview-ui.mjs';
 import {setupStencilExport} from './stencil-export-ui.mjs';
 import {sheetLayers} from './sheet-composition.mjs';
 import {newStencilPlan,createBridgeHistory} from './stencil-plan.mjs';
-import {sheetScale,pointSegmentDistance} from './stencil-geometry.mjs';
+import {pointSegmentDistance} from './stencil-geometry.mjs';
+import {sheetLayout,defaultLayout,fittedPair,bridgeOnPiece,assemblyOffset,joinBorderBands} from './sheet-layout.mjs';
 export function setupStencil({read,repaint,onSave,beforeSheet,onAssignIsland}){
  const $=id=>document.getElementById(id),svg=$('assign-stencil'),islandCanvas=$('assign-islands'),outline=$('assign-outline'),surface=$('assign-surface'),viewport=$('canvas-viewport'),ns='http://www.w3.org/2000/svg';
  let plan=newStencilPlan(),history=createBridgeHistory(),result=null,paths=null,sheetPaths={},worker=null,timer=null,generation=0,selected=null,selectedIsland=0,drag=null,adding=false,layerSignature='',missing=0,revision=0,autoBusy=false;
- const mode=()=>viewport.dataset.tool==='bridge',visible=t=>!plan.hiddenLayers.includes(t),chosen=()=>plan.bridges.find(b=>b.id===selected),scale=()=>{const s=read();return s?sheetScale(s.width,s.height,plan.longEdgeInches):null;};
+ let layoutWorker=null,layoutGeneration=0;
+ const mode=()=>viewport.dataset.tool==='bridge',visible=t=>!plan.hiddenLayers.includes(t),chosen=()=>plan.bridges.find(b=>b.id===selected),scale=()=>{const s=read();return s?sheetLayout(s.width,s.height,plan):null;};
+ const activeBridges=()=>{const g=scale();return g?plan.bridges.filter(b=>bridgeOnPiece(b,plan,g)):[];};
+ function stopLayout(){layoutGeneration++;layoutWorker?.terminate();layoutWorker=null;}
  function element(name,attrs){const e=document.createElementNS(ns,name);for(const [k,v] of Object.entries(attrs))e.setAttribute(k,v);return e;}
  function save(){onSave();}
- function bridgeList(){const list=$('bridge-list');list.replaceChildren();for(const b of plan.bridges.filter(b=>b.layer===plan.activeLayer)){
-   const button=document.createElement('button'),status=result?.bridgeStatus.find(s=>s.id===b.id);button.dataset.bridge=b.id;button.setAttribute('aria-pressed',String(b.id===selected));button.textContent=`Bridge ${list.children.length+1} · ${b.widthMm} mm${!b.enabled?' · off':status?.reason?' · review':''}`;list.append(button);
+ function bridgeList(){const list=$('bridge-list');list.replaceChildren();for(const b of activeBridges()){
+   const button=document.createElement('button'),status=result?.bridgeStatus.find(s=>s.id===b.id);button.dataset.bridge=b.id;button.setAttribute('aria-pressed',String(b.id===selected));button.textContent=`Bridge ${list.children.length+1} · ${b.widthMm} mm${!b.enabled?' · off':status?.reason?' · review':''}${plan.layout?.mode==='pair'&&b.piece===undefined?' · shared':''}`;list.append(button);
  }}
  function layers(){const s=read(),palette=s?.palette||[],signature=JSON.stringify([palette,plan.activeLayer,plan.hiddenLayers,plan.sheetIncludes]);if(signature===layerSignature)return;layerSignature=signature;
    $('stencil-layers').replaceChildren();const values=[-1,-2,...palette.slice(1).map((_,i)=>i+1)];
@@ -31,25 +35,37 @@ export function setupStencil({read,repaint,onSave,beforeSheet,onAssignIsland}){
    for(const [id,key] of [['bridge-auto-min','autoBridgeMinMm'],['bridge-auto-max','autoBridgeMaxMm']])if(document.activeElement!==$(id))$(id).value=plan[key];
    $('bridge-add').setAttribute('aria-pressed',String(adding));$('bridge-add').textContent=adding?'Stop drawing bridges':'Add bridge';if(document.activeElement!==$('bridge-width'))$('bridge-width').value=b?b.widthMm:plan.bridgeWidthMm;
    $('bridge-enabled').checked=b?b.enabled:true;$('bridge-enabled').disabled=!b;$('bridge-delete').disabled=!b;$('bridge-review').disabled=!b||!b.needsReview;
-   $('bridge-reset').disabled=!autoBusy&&!plan.bridges.some(b=>b.layer===plan.activeLayer);
+   $('bridge-reset').disabled=!autoBusy&&!activeBridges().length;
    $('bridge-undo').disabled=!history.canUndo;$('bridge-redo').disabled=!history.canRedo;
    $('island-next').disabled=!result?.islands.length;$('island-assign').disabled=!result?.islands.some(i=>i.id===selectedIsland)||!ready;
    $('stencil-show').checked=plan.showSheet;$('stencil-islands').checked=plan.showIslands;if(document.activeElement!==$('stencil-size'))$('stencil-size').value=plan.longEdgeInches;
-   if(s){const metric=scale();$('stencil-dimensions').textContent=`Artwork ${metric.widthInches.toFixed(2)} × ${metric.heightInches.toFixed(2)} in · working area ${metric.sheetWidthMm} × ${metric.sheetHeightMm} mm. ${metric.fits?'Artwork centered; surrounding Mylar stays intact.':`Too large: use a long edge of at most ${metric.maxLongEdgeInches.toFixed(2)} in.`}`;}
+   const metric=scale(),layout=metric?.layout||defaultLayout(),pair=layout.mode==='pair';
+   $('sheet-layout-mode').value=layout.mode;$('sheet-pair-controls').hidden=!pair;$('sheet-piece-controls').hidden=!pair;
+   $('sheet-layout-axis').value=layout.axis;$('sheet-layout-orientation').value=layout.orientation;$('sheet-active-piece').value=layout.activePiece;
+   $('sheet-trim-join').checked=layout.trimJoin;
+   if(document.activeElement!==$('sheet-overlap'))$('sheet-overlap').value=layout.overlapMm;
+   $('sheet-suggest-join').disabled=!ready||!!layoutWorker;$('sheet-suggest-join').textContent=layoutWorker?'Finding a join…':'Suggest join through unbleached areas';
+   $('sheet-join').disabled=!metric?.fits;
+   $('sheet-join').min=metric?.fits&&pair?Math.max(0,metric.minSplit*100):0;$('sheet-join').max=metric?.fits&&pair?Math.min(100,metric.maxSplit*100):100;
+   $('sheet-join').value=(metric?.joinFraction??layout.split)*100;$('sheet-join-position').textContent=Number($('sheet-join').value).toFixed(1)+'%';
+   if(s){$('stencil-dimensions').textContent=`Artwork ${metric.widthInches.toFixed(2)} × ${metric.heightInches.toFixed(2)} in · ${pair?'two working areas of':'working area'} ${metric.sheetWidthMm} × ${metric.sheetHeightMm} mm. ${metric.fits?pair?'Full size preserved. Review both pieces before cutting.':'Artwork centered; surrounding Mylar stays intact.':`Too large for this layout: use a long edge of at most ${metric.maxLongEdgeInches.toFixed(2)} in.`}`;
+     const offset=assemblyOffset(metric);$('sheet-assembly').textContent=`Piece ${metric.activePiece===0?'A':'B'} · working-area origin ${offset.xMm.toFixed(1)} mm right, ${offset.yMm.toFixed(1)} mm down from assembled top-left. ${layout.overlapMm} mm overlap. Same join for every intensity.${pair&&!layout.trimJoin?' Orange bands mark uncut joining stock borders; keep openings clear of them.':''}`;}
    const status=b&&result?.bridgeStatus.find(item=>item.id===b.id);$('bridge-selection').textContent=adding?'Drag to draw bridges repeatedly. Press Escape to stop.':b?status?.reason||'Bridge selected. Drag its ends or center to edit.':'Select a bridge or a highlighted island. Assign tools remain available.';
    bridgeList();
  }
  function paint(){const s=read(),show=!!s&&plan.showSheet;surface.classList.toggle('sheet-preview',show);svg.toggleAttribute('hidden',!show);islandCanvas.hidden=!show||!plan.showIslands||!result;
-   if(!s)return;svg.setAttribute('viewBox',`0 0 ${s.width} ${s.height}`);svg.replaceChildren();const metric=scale(),mx=metric.marginX,my=metric.marginY;
-   if(show){svg.append(element('rect',{x:-mx,y:-my,width:s.width+2*mx,height:s.height+2*my,fill:'transparent'}));const defs=element('defs',{}),mask=element('mask',{id:'stencil-material',maskUnits:'userSpaceOnUse',x:-mx,y:-my,width:s.width+2*mx,height:s.height+2*my});mask.append(element('rect',{x:-mx,y:-my,width:s.width+2*mx,height:s.height+2*my,fill:'white'}));
+   if(!s)return;svg.setAttribute('viewBox',`0 0 ${s.width} ${s.height}`);svg.replaceChildren();const metric=scale(),f=metric.frame;
+   if(show){svg.append(element('rect',{...f,fill:'transparent'}));const defs=element('defs',{}),mask=element('mask',{id:'stencil-material',maskUnits:'userSpaceOnUse',...f});mask.append(element('rect',{...f,fill:'white'}));
      if(result?.cutPath)mask.append(element('path',{d:result.cutPath,fill:'black','fill-rule':'evenodd'}));
-     for(const b of plan.bridges.filter(b=>b.layer===plan.activeLayer&&b.enabled))mask.append(element('line',{x1:b.a.x,y1:b.a.y,x2:b.b.x,y2:b.b.y,stroke:'white','stroke-width':b.widthMm*metric.pxPerMm,'stroke-linecap':'round'}));defs.append(mask);svg.append(defs);
-     svg.append(element('rect',{x:-mx,y:-my,width:s.width+2*mx,height:s.height+2*my,fill:'#f2eee1',opacity:.83,mask:'url(#stencil-material)'}));
-     svg.append(element('rect',{x:-mx,y:-my,width:s.width+2*mx,height:s.height+2*my,fill:'none',stroke:'#64746b','stroke-width':1,'stroke-dasharray':'5 4','vector-effect':'non-scaling-stroke'}));
+     for(const b of activeBridges().filter(b=>b.enabled))mask.append(element('line',{x1:b.a.x,y1:b.a.y,x2:b.b.x,y2:b.b.y,stroke:'white','stroke-width':b.widthMm*metric.pxPerMm,'stroke-linecap':'round'}));defs.append(mask);const clip=element('clipPath',{id:'active-piece-clip'});clip.append(element('rect',f));defs.append(clip);svg.append(defs);
+     svg.append(element('rect',{...f,fill:'#f2eee1',opacity:result?0.83:0,mask:'url(#stencil-material)'}));
+     for(const [index,frame] of metric.frames.entries())svg.append(element('rect',{...frame,fill:'none',stroke:index===metric.activePiece?'#26786a':'#8e6aac','stroke-width':index===metric.activePiece?2:1,'stroke-dasharray':'5 4','vector-effect':'non-scaling-stroke'}));
+     for(const band of joinBorderBands(metric))svg.append(element('rect',{...band,fill:'#c88420',opacity:.22}));
+     if(metric.frames.length===2){const vertical=metric.layout.axis==='x';svg.append(element('line',{x1:vertical?metric.join:0,y1:vertical?0:metric.join,x2:vertical?metric.join:s.width,y2:vertical?s.height:metric.join,stroke:'#bc7b32','stroke-width':1,'stroke-dasharray':'6 4','vector-effect':'non-scaling-stroke'}));}
      for(const path of paths||[])if(!sheetLayers(plan).includes(path.treatment)&&visible(path.treatment))svg.append(element('path',{d:path.d,fill:path.treatment===-2?'#526577':`rgb(${s.palette[path.treatment]?.join(',')||'140,140,140'})`,opacity:.14,'fill-rule':'evenodd'}));
-     if(result?.cutPath&&visible(plan.activeLayer))svg.append(element('path',{d:result.cutPath,fill:'none',stroke:'#239baf','stroke-width':1,'vector-effect':'non-scaling-stroke'}));
+     if(result?.cutPath&&visible(plan.activeLayer))svg.append(element('path',{d:result.cutPath,fill:'none',stroke:'#239baf','stroke-width':1,'vector-effect':'non-scaling-stroke','clip-path':'url(#active-piece-clip)'}));
      const screenScale=outline.width/Math.max(1,outline.getBoundingClientRect().width);
-     for(const b of plan.bridges.filter(b=>b.layer===plan.activeLayer&&visible(b.layer))){const status=result?.bridgeStatus.find(item=>item.id===b.id),color=b.id===selected?'#126bbb':status?.reason||b.needsReview?'#bf6c23':'#2b8662';
+     for(const b of activeBridges().filter(b=>visible(b.layer))){const status=result?.bridgeStatus.find(item=>item.id===b.id),color=b.id===selected?'#126bbb':status?.reason||b.needsReview?'#bf6c23':'#2b8662';
        svg.append(element('line',{x1:b.a.x,y1:b.a.y,x2:b.b.x,y2:b.b.y,stroke:color,'stroke-width':b.widthMm*metric.pxPerMm,'stroke-linecap':'round',opacity:b.enabled?.65:.25}));
        if(mode()&&b.id===selected)for(const p of [b.a,b.b])svg.append(element('circle',{cx:p.x,cy:p.y,r:5*screenScale,fill:'white',stroke:color,'stroke-width':1.5,'vector-effect':'non-scaling-stroke'}));
      }
@@ -73,12 +89,12 @@ export function setupStencil({read,repaint,onSave,beforeSheet,onAssignIsland}){
    }catch(error){autoBusy=false;$('stencil-status').textContent=`Sheet check failed: ${error.message}`;}controls();
  }
  function schedule(){stop();result=null;selectedIsland=0;paint();controls();if(plan.showSheet)timer=setTimeout(analyze,180);}
- function invalidate(review=true){cancel();$('bridge-auto-status').textContent='';paths=null;if(review){revision++;for(const b of plan.bridges)b.needsReview=true;}schedule();}
+ function invalidate(review=true){stopLayout();cancel();$('bridge-auto-status').textContent='';if(plan.layout?.mode==='pair')$('sheet-join-status').textContent='Artwork changed. Suggest or review the join again.';paths=null;if(review){revision++;for(const b of plan.bridges)b.needsReview=true;}schedule();}
  function activate(){plan.hiddenLayers=plan.hiddenLayers.filter(t=>t!==plan.activeLayer);plan.showSheet=true;beforeSheet();$('stencil-island').open=true;schedule();save();}
  function setLayer(value){cancel();$('bridge-auto-status').textContent='';plan.activeLayer=Number(value);selected=null;adding=false;activate();}
  function commit(before){if(history.commit({bridges:before,revision},{bridges:plan.bridges,revision})){schedule();save();}else{controls();paint();}}
  function edit(fn){const before=structuredClone(plan.bridges);fn();commit(before);}
- function point(e){const rect=outline.getBoundingClientRect(),s=read(),metric=scale(),mx=Math.max(0,metric.marginX),my=Math.max(0,metric.marginY);return {x:Math.max(-mx,Math.min(s.width+mx,(e.clientX-rect.left)*s.width/rect.width)),y:Math.max(-my,Math.min(s.height+my,(e.clientY-rect.top)*s.height/rect.height))};}
+ function point(e){const rect=outline.getBoundingClientRect(),s=read(),f=scale().frame;return {x:Math.max(f.x,Math.min(f.x+f.width,(e.clientX-rect.left)*s.width/rect.width)),y:Math.max(f.y,Math.min(f.y+f.height,(e.clientY-rect.top)*s.height/rect.height))};}
  function cancel(){if(autoBusy){stop();schedule();}if(drag){plan.bridges=drag.before;drag=null;}adding=false;controls();paint();}
  function undo(redo=false){cancel();const restored=redo?history.redo({bridges:plan.bridges,revision}):history.undo({bridges:plan.bridges,revision});if(restored){plan.bridges=restored.bridges;if(restored.revision!==revision)for(const b of plan.bridges)b.needsReview=true;selected=null;schedule();save();}}
  function pointerDown(e){
@@ -86,9 +102,9 @@ export function setupStencil({read,repaint,onSave,beforeSheet,onAssignIsland}){
    const before=structuredClone(plan.bridges);let b=chosen(),part=null;
    if(!adding){
      if(b&&b.layer===plan.activeLayer)for(const end of ['a','b'])if(Math.hypot(p.x-b[end].x,p.y-b[end].y)<=radius)part=end;
-     if(!part){b=[...plan.bridges].reverse().find(item=>item.layer===plan.activeLayer&&visible(item.layer)&&pointSegmentDistance(p,item.a,item.b)<=Math.max(radius,item.widthMm*scale().pxPerMm/2));if(b)part='move';}
+     if(!part){b=activeBridges().reverse().find(item=>visible(item.layer)&&pointSegmentDistance(p,item.a,item.b)<=Math.max(radius,item.widthMm*scale().pxPerMm/2));if(b)part='move';}
    }
-   if(adding){b={id:crypto.randomUUID(),layer:plan.activeLayer,a:p,b:p,widthMm:plan.bridgeWidthMm,enabled:true,needsReview:false};plan.bridges.push(b);part='b';}
+   if(adding){b={id:crypto.randomUUID(),layer:plan.activeLayer,...(plan.layout?.mode==='pair'?{piece:plan.layout.activePiece}:{}),a:p,b:p,widthMm:plan.bridgeWidthMm,enabled:true,needsReview:false};plan.bridges.push(b);part='b';}
    if(!b||!part){selected=null;const i=Math.floor(p.y)*read().width+Math.floor(p.x);selectedIsland=p.x>=0&&p.y>=0&&p.x<read().width&&p.y<read().height?Math.max(0,result?.labels[i]||0):0;controls();paint();return;}
    selected=b.id;drag={pointer:e.pointerId,before,start:p,original:structuredClone(b),part,created:adding};outline.setPointerCapture(e.pointerId);controls();paint();
  }
@@ -101,19 +117,58 @@ export function setupStencil({read,repaint,onSave,beforeSheet,onAssignIsland}){
  viewport.addEventListener('canvas-deselect',()=>{selected=null;selectedIsland=0;paint();controls();});
  window.addEventListener('blur',()=>{if(drag)cancel();});
  $('stencil-show').addEventListener('change',()=>{plan.showSheet=$('stencil-show').checked;if(plan.showSheet)activate();else{cancel();stop();paint();save();}});
+ function changeLayout(update){
+   stopLayout();cancel();plan.layout={...defaultLayout(),...plan.layout,...update};
+   const g=scale();if(g.fits&&g.frames.length===2)plan.layout.split=g.joinFraction;
+   revision++;for(const b of plan.bridges)b.needsReview=true;
+   selected=null;selectedIsland=0;plan.showSheet=true;beforeSheet();exporter.reset();$('sheet-join-status').textContent='Join changed. Review both pieces and their bridges.';schedule();save();
+ }
+ $('sheet-layout-mode').addEventListener('change',()=>{
+   const s=read();if(!s)return;
+   const mode=$('sheet-layout-mode').value;
+   changeLayout(mode==='pair'&&!plan.layout?fittedPair(s.width,s.height,plan):{mode,activePiece:0});
+ });
+ for(const [id,key] of [['sheet-layout-axis','axis'],['sheet-layout-orientation','orientation']])$(id).addEventListener('change',()=>changeLayout({[key]:$(id).value}));
+ $('sheet-overlap').addEventListener('change',()=>changeLayout({overlapMm:Math.max(1,Math.min(100,Number($('sheet-overlap').value)||10))}));
+ $('sheet-trim-join').addEventListener('change',()=>changeLayout({trimJoin:$('sheet-trim-join').checked}));
+ $('sheet-join').addEventListener('input',()=>{$('sheet-join-position').textContent=Number($('sheet-join').value).toFixed(1)+'%';});
+ $('sheet-join').addEventListener('change',()=>changeLayout({split:Number($('sheet-join').value)/100}));
+ $('sheet-active-piece').addEventListener('change',()=>{const piece=Number($('sheet-active-piece').value);stopLayout();cancel();plan.layout={...defaultLayout(),...plan.layout,activePiece:piece};selected=null;selectedIsland=0;exporter.reset();schedule();save();});
+ $('sheet-fit-layout').addEventListener('click',()=>{const g=scale();if(!g)return;const x=Math.min(...g.frames.map(f=>f.x)),y=Math.min(...g.frames.map(f=>f.y)),right=Math.max(...g.frames.map(f=>f.x+f.width)),bottom=Math.max(...g.frames.map(f=>f.y+f.height));viewport.dispatchEvent(new CustomEvent('canvas-focus-region',{detail:[x,y,right,bottom]}));});
+ $('sheet-suggest-join').addEventListener('click',()=>{
+   stopLayout();const s=read();if(!s)return;
+   const current=layoutGeneration,n=s.width*s.height,treatments=new Int16Array(n),alpha=new Uint8Array(n);
+   for(let i=0;i<n;i++){treatments[i]=s.at(i);alpha[i]=s.source[i*4+3];}
+   $('sheet-join-status').textContent='Looking for a retained band across all intensity layers…';
+   try{layoutWorker=new Worker(new URL('./sheet-layout-worker.mjs',import.meta.url),{type:'module'});
+     layoutWorker.onmessage=({data})=>{if(current!==layoutGeneration)return;layoutWorker.terminate();layoutWorker=null;
+       if(data.error){$('sheet-join-status').textContent=data.error;controls();return;}
+       changeLayout(data.layout);
+       const band=data.layout.trimJoin?'overlap and 2 mm clearance band':'overlap, uncut stock borders and 2 mm clearance band';
+       $('sheet-join-status').textContent=data.cutPixels?`Best available join crosses ${data.cutPixels.toLocaleString()} assigned opening pixels in its ${band}. Review crossings; an invisible join is not guaranteed.`:`No assigned openings cross the ${band}.${data.unassignedPixels?' Unassigned pixels remain in this band; review them before cutting.':' The band is retained across all intensities.'}`;
+     };
+     layoutWorker.onerror=()=>{if(current===layoutGeneration){stopLayout();$('sheet-join-status').textContent='Could not suggest a join. Adjust the position manually.';controls();}};
+     layoutWorker.postMessage({width:s.width,height:s.height,treatments,alpha,plan},[treatments.buffer,alpha.buffer]);controls();
+   }catch(error){stopLayout();$('sheet-join-status').textContent=error.message;controls();}
+ });
  function setIncludes(members){cancel();plan.sheetIncludes[plan.activeLayer]=members;revision++;for(const b of plan.bridges)if(b.layer===plan.activeLayer)b.needsReview=true;selected=null;selectedIsland=0;$('bridge-auto-status').textContent='';schedule();save();}
  $('stencil-includes').addEventListener('change',e=>{if(!e.target.matches('[data-include-layer]'))return;const id=Number(e.target.dataset.includeLayer),members=(plan.sheetIncludes[plan.activeLayer]||[]).filter(v=>v!==id);if(e.target.checked)members.push(id);setIncludes(members.sort((a,b)=>a-b));});
  $('stencil-separate').addEventListener('click',()=>setIncludes([]));
  $('stencil-active').addEventListener('change',()=>setLayer($('stencil-active').value));
  $('stencil-islands').addEventListener('change',()=>{plan.showIslands=$('stencil-islands').checked;paint();save();});
- for(const [id,key,min,max] of [['stencil-size','longEdgeInches',1,100]])$(id).addEventListener('change',()=>{plan[key]=Math.max(min,Math.min(max,Number($(id).value)||newStencilPlan()[key]));revision++;for(const b of plan.bridges)b.needsReview=true;schedule();save();});
+ for(const [id,key,min,max] of [['stencil-size','longEdgeInches',1,100]])$(id).addEventListener('change',()=>{stopLayout();plan[key]=Math.max(min,Math.min(max,Number($(id).value)||newStencilPlan()[key]));if(plan.layout?.mode==='pair'){const g=scale();if(g.fits)plan.layout.split=g.joinFraction;$('sheet-join-status').textContent='Size changed. Suggest or review the join again.';}revision++;for(const b of plan.bridges)b.needsReview=true;schedule();save();});
  for(const [id,key,other] of [['bridge-auto-min','autoBridgeMinMm','autoBridgeMaxMm'],['bridge-auto-max','autoBridgeMaxMm','autoBridgeMinMm']])$(id).addEventListener('change',()=>{const input=Number($(id).value);plan[key]=Math.round(Math.max(.25,Math.min(25,Number.isFinite(input)&&input>0?input:newStencilPlan()[key]))*100)/100;if(key==='autoBridgeMinMm'&&plan[key]>plan[other]||key==='autoBridgeMaxMm'&&plan[key]<plan[other])plan[other]=plan[key];$(id).value=plan[key];$('bridge-auto-status').textContent='';if(autoBusy)schedule();else controls();save();});
  $('bridge-auto').addEventListener('click',()=>{cancel();$('bridge-auto-status').textContent='';analyze(true);});
  $('bridge-add').addEventListener('click',()=>{if(adding){cancel();selected=null;controls();paint();return;}plan.hiddenLayers=plan.hiddenLayers.filter(t=>t!==plan.activeLayer);$('tool-bridge').click();activate();selected=null;adding=true;controls();paint();});
  $('bridge-width').addEventListener('change',()=>{const value=Math.max(.25,Math.min(25,Number($('bridge-width').value)||3));plan.bridgeWidthMm=value;if(chosen())edit(()=>{chosen().widthMm=value;chosen().needsReview=false;});else{if(autoBusy)schedule();else controls();save();}});
  $('bridge-enabled').addEventListener('change',()=>{if(chosen())edit(()=>chosen().enabled=$('bridge-enabled').checked);});
- $('bridge-reset').addEventListener('click',()=>{cancel();$('bridge-auto-status').textContent='';edit(()=>{plan.bridges=plan.bridges.filter(b=>b.layer!==plan.activeLayer);selected=null;selectedIsland=0;});});
- $('bridge-delete').addEventListener('click',()=>edit(()=>{plan.bridges=plan.bridges.filter(b=>b.id!==selected);selected=null;}));
+ function removeBridgesHere(predicate){const g=scale(),ids=new Set(activeBridges().filter(predicate).map(b=>b.id));plan.bridges=plan.bridges.flatMap(b=>{
+   if(!ids.has(b.id))return [b];
+   const other=1-g.activePiece;
+   return g.frames.length===2&&b.piece===undefined&&bridgeOnPiece(b,plan,g,other)?[{...b,piece:other}]:[];
+ });}
+ $('bridge-reset').addEventListener('click',()=>{cancel();$('bridge-auto-status').textContent='';edit(()=>{removeBridgesHere(()=>true);selected=null;selectedIsland=0;});});
+ $('bridge-delete').addEventListener('click',()=>edit(()=>{removeBridgesHere(b=>b.id===selected);selected=null;}));
  $('bridge-review').addEventListener('click',()=>{if(chosen())edit(()=>chosen().needsReview=false);});
  $('bridge-undo').addEventListener('click',()=>undo());$('bridge-redo').addEventListener('click',()=>undo(true));
  $('bridge-list').addEventListener('click',e=>{const b=e.target.closest('[data-bridge]');if(!b)return;$('tool-bridge').click();selected=b.dataset.bridge;adding=false;controls();paint();});
@@ -128,8 +183,8 @@ export function setupStencil({read,repaint,onSave,beforeSheet,onAssignIsland}){
  const exporter=setupStencilExport({prepare:()=>{cancel();beforeSheet();},read:()=>{const s=read();return s?{...s,plan:structuredClone(plan),paths,cachedCutPath:paths?sheetPaths[sheetLayers(plan).join(',')]:undefined}:null;}});
  return {visible,controls,invalidate,paint,
    snapshot:()=>structuredClone(plan),
-   hide(){plan.showSheet=false;stop();cancel();paint();},
-   reset(){exporter.reset();stop();adding=false;$('bridge-auto-status').textContent='';plan=newStencilPlan();revision=0;history=createBridgeHistory();paths=result=null;selected=null;selectedIsland=0;drag=null;layerSignature='';controls();paint();},
-   restore(saved){exporter.reset();stop();adding=false;$('bridge-auto-status').textContent='';plan={...newStencilPlan(),...(saved?structuredClone(saved):{})};revision=0;history=createBridgeHistory();paths=result=null;selected=null;layerSignature='';controls();paint();if(plan.showSheet){beforeSheet();schedule();}}
+   hide(){stopLayout();plan.showSheet=false;stop();cancel();paint();},
+   reset(){stopLayout();exporter.reset();stop();adding=false;$('bridge-auto-status').textContent='';$('sheet-join-status').textContent='';plan=newStencilPlan();revision=0;history=createBridgeHistory();paths=result=null;selected=null;selectedIsland=0;drag=null;layerSignature='';controls();paint();},
+   restore(saved){stopLayout();exporter.reset();stop();adding=false;$('bridge-auto-status').textContent='';$('sheet-join-status').textContent='';plan={...newStencilPlan(),...(saved?structuredClone(saved):{})};revision=0;history=createBridgeHistory();paths=result=null;selected=null;layerSignature='';controls();paint();if(plan.showSheet){beforeSheet();schedule();}}
  };
 }

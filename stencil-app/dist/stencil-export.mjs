@@ -1,6 +1,8 @@
 import clipping from './vendor/polygon-clipping.mjs';
 import {buildSheetGeometry,sheetLayers} from './sheet-composition.mjs';
-import {sheetScale,pointSegmentDistance,rasterizeCutPath,analyzeSheet} from './stencil-geometry.mjs';
+import {pointSegmentDistance} from './stencil-geometry.mjs';
+import {sheetLayout,bridgeOnPiece,assemblyOffset,joinBorderBands} from './sheet-layout.mjs';
+import {analyzeLayoutSheet} from './panel-analysis.mjs';
 
 // Work in vector coordinates throughout: rasterizing and retracing the preview
 // would erase the saved smoothing and quantize physical bridge widths.
@@ -48,38 +50,59 @@ function bounds(ring){let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;for(
 export function buildStencilExport(data){
  const {width,height,plan,treatments,alpha}=data;
  if(!(width>0&&height>0&&plan.activeLayer>0&&plan.longEdgeInches>0))throw Error('Choose a positive intensity and valid sheet dimensions.');
- const {cutPath}=buildSheetGeometry(data),scale=sheetScale(width,height,plan.longEdgeInches),mx=scale.marginX,my=scale.marginY;
- if(!scale.fits)throw Error(`Artwork exceeds the 290 × 590 mm working area. Reduce its long edge to ${scale.maxLongEdgeInches.toFixed(2)} inches or less.`);
+ const {cutPath}=buildSheetGeometry(data),scale=sheetLayout(width,height,plan),f=scale.frame,pair=scale.frames.length===2;
+ if(!scale.fits)throw Error(`Artwork exceeds ${pair?'the two working areas':'the 290 × 590 mm working area'}. Reduce its long edge to ${scale.maxLongEdgeInches.toFixed(2)} inches or less.`);
  // At most .005 mm or .05 source pixels per curve/capsule approximation.
  const tolerance=Math.min(.05,.005*scale.pxPerMm),rings=pathRings(cutPath,tolerance);
  if(!rings.length)throw Error('This sheet has no openings. Assign an intensity or choose another sheet.');
- const bridges=plan.bridges.filter(b=>b.layer===plan.activeLayer&&b.enabled);
- const inside=p=>Number.isFinite(p.x)&&Number.isFinite(p.y)&&p.x>=-mx&&p.y>=-my&&p.x<=width+mx&&p.y<=height+my;
- if(bridges.some(b=>!inside(b.a)||!inside(b.b)))throw Error('A bridge is outside the sheet. Move it back or disable it before exporting.');
+ const bridges=plan.bridges.filter(b=>b.enabled&&bridgeOnPiece(b,plan,scale));
+ const inside=p=>Number.isFinite(p.x)&&Number.isFinite(p.y)&&p.x>=f.x&&p.y>=f.y&&p.x<=f.x+f.width&&p.y<=f.y+f.height;
+ if(bridges.some(b=>(!pair||b.piece!==undefined)&&(!inside(b.a)||!inside(b.b))))throw Error('A bridge is outside the sheet. Move it back or disable it before exporting.');
  let openings=evenOdd(rings);
  // Sequential batches also merge crossing/overlapping bridges without doubled cuts.
  for(let i=0;i<bridges.length;i+=128)openings=clipping.difference(openings,...bridges.slice(i,i+128).map(b=>bridgePolygon(b,scale.pxPerMm,tolerance)));
- const frame=[[[ -mx,-my],[width+mx,-my],[width+mx,height+my],[-mx,height+my],[-mx,-my]]];
+ const rectangle=r=>[[[r.x,r.y],[r.x+r.width,r.y],[r.x+r.width,r.y+r.height],[r.x,r.y+r.height],[r.x,r.y]]];
+ const ringArea=ring=>Math.abs(ring.slice(1).reduce((sum,p,i)=>sum+ring[i][0]*p[1]-p[0]*ring[i][1],0)/2);
+ const polygonsArea=polygons=>polygons.reduce((sum,polygon)=>sum+ringArea(polygon[0])-polygon.slice(1).reduce((v,ring)=>v+ringArea(ring),0),0);
+ const frame=rectangle(f);
  openings=clipping.intersection(openings,frame);
- if(!openings.length)throw Error('No openings remain after bridges. Choose another sheet or edit its bridges.');
+ if(!openings.length)throw Error(pair?`Piece ${scale.activePiece===0?'A':'B'} has no openings. Use uncut Mylar for this piece; no SVG cut file is needed.`:'No openings remain after bridges. Choose another sheet or edit its bridges.');
+ const blocked=joinBorderBands(scale).reduce((sum,band)=>sum+polygonsArea(clipping.intersection(openings,rectangle(band))),0)/scale.pxPerMm**2;
+ if(blocked>1e-8)throw Error(`The neighboring sheet's uncut stock border would block ${blocked.toFixed(1)} mm² of this piece's openings. Move the join into retained material, or enable manual trimming of the joining edges before exporting.`);
  const material=clipping.difference(frame,openings),openingPath=path(openings),warnings=[];
  const disconnected=Math.max(0,material.length-1);
  if(disconnected)warnings.push(`${disconnected} disconnected retained ${disconnected===1?'piece will':'pieces will'} fall out. Add bridges or remove those islands.`);
- const analysis=analyzeSheet(rasterizeCutPath(cutPath,width,height),width,height,bridges,scale.pxPerMm,scale);
- const reviews=analysis.bridgeStatus.filter(b=>b.reason);
+ let analysis;
+ try{analysis=analyzeLayoutSheet(cutPath,width,height,plan).result;}
+ catch(error){
+   if(error.code!=='SHEET_ANALYSIS_LIMIT')throw error;
+   warnings.push('Native-resolution bridge connectivity was not checked: this physical working area exceeds the analysis memory limit. Review the final vector geometry and bridge anchoring.');
+   analysis={bridgeStatus:bridges.filter(b=>b.needsReview).map(b=>({id:b.id,reason:'Review after artwork or size change'}))};
+ }
+ const reviews=analysis.bridgeStatus.filter(b=>b.reason&&b.reason!=='Disabled');
  if(reviews.length)warnings.push(`${reviews.length} ${reviews.length===1?'bridge needs':'bridges need'} review: ${[...new Set(reviews.map(b=>b.reason))].join('; ')}.`);
  const narrow=bridges.filter(b=>b.widthMm<2).length;
  if(narrow)warnings.push(`${narrow} ${narrow===1?'bridge is':'bridges are'} below 2 mm. Check material strength with a test cut.`);
  const tiny=openings.flat().filter(r=>{const b=bounds(r);return Math.min(b.width,b.height)/scale.pxPerMm<1;}).length;
  if(tiny)warnings.push(`${tiny} cut ${tiny===1?'contour has':'contours have'} a bounding width or height below 1 mm. Inspect small details.`);
+ let joinOpeningAreaMm2=0;
+ if(pair){
+   const [a,b]=scale.frames,x=Math.max(a.x,b.x),y=Math.max(a.y,b.y),right=Math.min(a.x+a.width,b.x+b.width),bottom=Math.min(a.y+a.height,b.y+b.height);
+   const overlap=clipping.intersection(openings,rectangle({x,y,width:right-x,height:bottom-y}));
+   joinOpeningAreaMm2=polygonsArea(overlap)/scale.pxPerMm**2;
+   if(joinOpeningAreaMm2>1e-8)warnings.push(`The join overlap crosses ${joinOpeningAreaMm2.toFixed(1)} mm² of openings on this piece. Align duplicated cutouts precisely and keep tape clear; a seam-free result is not guaranteed.`);
+   if(scale.layout.trimJoin)warnings.push('Before assembly, manually trim only the two joining stock edges to their working-area boundaries. The SVG does not cut those trim lines. Keep the other stock edges for shielding.');
+ }
  let unassigned=0;for(let i=0;i<treatments.length;i++)if(alpha[i]&&treatments[i]===-1)unassigned++;
  if(unassigned)warnings.push(`${unassigned.toLocaleString()} unassigned pixels remain retained material.`);
  const widthMm=scale.sheetWidthMm,heightMm=scale.sheetHeightMm;
- const convert=([x,y])=>[(x+mx)/scale.pxPerMm,(y+my)/scale.pxPerMm];
+ const convert=([x,y])=>[(x-f.x)/scale.pxPerMm,(y-f.y)/scale.pxPerMm];
  const d=path(openings,convert),materialPath=path(material,convert);
  const points=openings.flat(2).map(convert);let leftMm=Infinity,topMm=Infinity,rightMm=-Infinity,bottomMm=-Infinity;
  for(const [x,y] of points){leftMm=Math.min(leftMm,x);topMm=Math.min(topMm,y);rightMm=Math.max(rightMm,x);bottomMm=Math.max(bottomMm,y);}
  const cutBounds={leftMm,topMm,widthMm:rightMm-leftMm,heightMm:bottomMm-topMm};
- const svg=`<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${number(widthMm)}mm" height="${number(heightMm)}mm" viewBox="0 0 ${number(widthMm)} ${number(heightMm)}">\n<title>Stencil Intensity ${plan.activeLayer}</title>\n<desc>Sheet ${number(widthMm)} x ${number(heightMm)} mm. Cuts treatments ${sheetLayers(plan).join(', ')}. Openings only; no outer sheet edge is cut. Bridges are retained material. Cut bounds ${number(cutBounds.widthMm)} x ${number(cutBounds.heightMm)} mm; top-left offset ${number(leftMm)}, ${number(topMm)} mm from working-area origin.</desc>\n<path id="stencil-sheet-${plan.activeLayer}" fill="#000000" fill-rule="evenodd" d="${d}"/>\n</svg>\n`;
- return {svg,d,materialPath,cutBounds,widthMm,heightMm,openingPath,warnings,disconnected,members:sheetLayers(plan),layer:plan.activeLayer,filename:`stencil-intensity-${plan.activeLayer}-${widthMm.toFixed(2)}x${heightMm.toFixed(2)}mm.svg`};
+ const piece=pair?scale.activePiece:null,offset=assemblyOffset(scale),label=pair?` · Piece ${piece===0?'A':'B'}`:'';
+ const assembly=pair?` Assemble both pieces before spraying. Working-area origin offset ${number(offset.xMm)}, ${number(offset.yMm)} mm from the assembled top-left; overlap ${number(scale.layout.overlapMm)} mm. Shared openings are duplicated on both pieces.${scale.layout.trimJoin?' Center and mark each working area on the stock, then manually trim the two joining stock edges to those boundaries before taping.':''} No registration marks or stock edges are cut by this SVG.`:'';
+ const svg=`<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${number(widthMm)}mm" height="${number(heightMm)}mm" viewBox="0 0 ${number(widthMm)} ${number(heightMm)}">\n<title>Stencil Intensity ${plan.activeLayer}${label}</title>\n<desc>Sheet ${number(widthMm)} x ${number(heightMm)} mm. Cuts treatments ${sheetLayers(plan).join(', ')}. Openings only; no outer sheet edge is cut. Bridges are retained material. Cut bounds ${number(cutBounds.widthMm)} x ${number(cutBounds.heightMm)} mm; top-left offset ${number(leftMm)}, ${number(topMm)} mm from working-area origin.${assembly}</desc>\n<path id="stencil-sheet-${plan.activeLayer}" fill="#000000" fill-rule="evenodd" d="${d}"/>\n</svg>\n`;
+ return {svg,d,materialPath,cutBounds,widthMm,heightMm,openingPath,warnings,disconnected,members:sheetLayers(plan),layer:plan.activeLayer,piece,assemblyOffsetMm:offset,joinOpeningAreaMm2,filename:`stencil-intensity-${plan.activeLayer}${pair?`-piece-${piece===0?'a':'b'}`:''}-${widthMm.toFixed(2)}x${heightMm.toFixed(2)}mm.svg`};
 }

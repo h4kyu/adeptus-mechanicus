@@ -4,7 +4,17 @@
 
 The recurring freezes have two confirmed causes: full-project serialization on the UI thread, and repeated native-resolution canvas scans/repaints. There is no need to reduce the artwork resolution to address either.
 
-The user's editor on port 8765 and its project directory were left alone. Investigation used `/private/tmp/adeptus-mechanicus-performance`, port 8767, and a separate disk copy of the project. Production editor files in this branch remain unchanged; the candidate codec and worker live under `stencil-app/dist/performance/` and are used only by the diagnostic page. The repaint experiment is supplied as a separate patch.
+The initial investigation left the user's editor on port 8765 and its project directory alone. It used `/private/tmp/adeptus-mechanicus-performance`, port 8767, and a separate disk copy of the project. Commit `ed41155` contains that investigation and its baseline diagnostic page.
+
+## Implemented performance fixes
+
+The reusable `project-codec-client.mjs` / `project-codec-worker.mjs` handles actual disk save/load plus import/export/migration serialization; the shared decoder uses an indexed byte loop; cleanup clearing no longer causes duplicate paints during assignment updates; assigned-pixel counts are cached per edit. The worker clones a consistent snapshot and retains live editor buffers, routes replies by ID, surfaces failures, and restarts on retry. The existing save queue and durable disk API are retained.
+
+Start the editor with `node stencil-app/server.mjs`. It uses `stencil-app/projects/` by default. The trial used separate project copies during verification.
+
+Validation: 24 focused project/worker/cleanup/disk/HTTP checks passed. Browser trial opened Bonsai, saved through the worker, checked source pixels, segmentation, assignments and recipes against the pre-test snapshot, and reopened with the saved camera. Worker tests cover edits after snapshot capture, concurrent reply routing, failed/malformed jobs, failed-worker replacement, late replies/errors, and no disk request on encoding failure.
+
+Measurements below describe the original investigation. The standalone benchmark imports the current codec, so rerunning it after these changes measures the updated codec; use investigation commit `ed41155` in a separate checkout to reproduce the original baseline. Incremental canvas tiles, continuous-stroke profiling and iPad memory testing remain outstanding.
 
 ## Why this project exposes the problem
 

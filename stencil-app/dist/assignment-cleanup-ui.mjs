@@ -8,8 +8,8 @@ export function setupAssignmentCleanup({read,repaint,apply,beforePreview}){
     $('refine-cancel').disabled=!result&&!worker;
     $('refine-show-row').hidden=!result?.changedPixels;
   }
-  function clear(message=''){
-    generation++;worker?.terminate();worker=null;result=null;$('refine-status').textContent=message;controls();repaint();
+  function clear(message='',{repaintNow=true}={}){
+    generation++;worker?.terminate();worker=null;result=null;$('refine-status').textContent=message;controls();if(repaintNow)repaint();
   }
   function minimum(){const input=$('refine-minimum');input.value=Math.min(1000000,Math.max(1,Math.round(Number(input.value))||20));return Number(input.value);}
   $('refine-minimum').addEventListener('change',()=>{minimum();clear('Settings changed. Preview cleanup again.');});

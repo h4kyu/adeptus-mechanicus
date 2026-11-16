@@ -9,8 +9,11 @@ export function validateStencilPlan(plan,width,height,paletteCount){
    const groups=plan.sheetIncludes;if(!groups||typeof groups!=='object'||Array.isArray(groups))fail();
    for(const [key,members] of Object.entries(groups))if(!/^[1-7]$/.test(key)||!Array.isArray(members)||new Set(members).size!==members.length||members.some(v=>!Number.isInteger(v)||v<1||v>7||v===Number(key)))fail();
  }
+ if(plan.layout!==undefined){const l=plan.layout;
+   if(!l||!['single','pair'].includes(l.mode)||!['x','y'].includes(l.axis)||!['portrait','landscape'].includes(l.orientation)||!number(l.overlapMm,1,100)||!number(l.split,0,1)||![0,1].includes(l.activePiece)||l.trimJoin!==undefined&&typeof l.trimJoin!=='boolean')fail();
+ }
  const ids=new Set();
- for(const b of plan.bridges){if(typeof b.id!=='string'||!b.id||ids.has(b.id)||!Number.isInteger(b.layer)||b.layer<1||b.layer>7||!number(b.widthMm,.25,25)||typeof b.enabled!=='boolean'||typeof b.needsReview!=='boolean')fail();ids.add(b.id);for(const p of [b.a,b.b])if(!p||!number(p.x,-width*100,width*101)||!number(p.y,-height*100,height*101))fail();}
+ for(const b of plan.bridges){if(typeof b.id!=='string'||!b.id||ids.has(b.id)||!Number.isInteger(b.layer)||b.layer<1||b.layer>7||!number(b.widthMm,.25,25)||typeof b.enabled!=='boolean'||typeof b.needsReview!=='boolean'||b.piece!==undefined&&![0,1].includes(b.piece))fail();ids.add(b.id);for(const p of [b.a,b.b])if(!p||!number(p.x,-width*100,width*101)||!number(p.y,-height*100,height*101))fail();}
  return plan;
 }
 // Bridge history is separate from assignment history: a drag is committed once on release.

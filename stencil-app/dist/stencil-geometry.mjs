@@ -22,7 +22,7 @@ export function rasterizeCutPath(d,width,height){
  for(let y=0;y<height;y++){const crossings=rows[y].sort((a,b)=>a-b);for(let k=0;k+1<crossings.length;k+=2)for(let x=Math.max(0,Math.ceil(crossings[k]-.5));x<Math.min(width,Math.ceil(crossings[k+1]-.5));x++)cut[y*width+x]=1;}
  return cut;
 }
-export function analyzeSheet(baseCut,width,height,bridges,pxPerMm,margin){
+export function analyzeSheet(baseCut,width,height,bridges,pxPerMm,margin,{physicalFrame=false}={}){
  const cut=baseCut.slice(),bridgeStatus=[];
  const mx=typeof margin==='object'?margin.marginX:margin,my=typeof margin==='object'?margin.marginY:margin;
  const inSheet=p=>p.x>=-mx&&p.y>=-my&&p.x<=width+mx&&p.y<=height+my;
@@ -41,6 +41,19 @@ export function analyzeSheet(baseCut,width,height,bridges,pxPerMm,margin){
  const labels=new Int32Array(cut.length).fill(-1),queue=new Int32Array(cut.length),islands=[];let tail=0;
  function seed(i,id){if(!cut[i]&&labels[i]===-1){labels[i]=id;queue[tail++]=i;}}
  function flood(id){let head=0,area=0,minX=width,minY=height,maxX=0,maxY=0;while(head<tail){const i=queue[head++],x=i%width,y=Math.floor(i/width);area++;minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);if(x)seed(i-1,id);if(x+1<width)seed(i+1,id);if(y)seed(i-width,id);if(y+1<height)seed(i+width,id);}return {id,area,bounds:[minX,minY,maxX,maxY]};}
+ if(physicalFrame){
+   // A tile edge can pass through an opening. Its opposite edges must not be
+   // treated as an imaginary surrounding frame connecting separate pieces.
+   const components=[];
+   for(let i=0;i<cut.length;i++)if(!cut[i]&&labels[i]===-1){tail=0;const id=components.length+1;seed(i,id);components.push(flood(id));}
+   let root=null;for(const component of components)if(!root||component.area>root.area)root=component;
+   const mapping=new Int32Array(components.length+1).fill(-1);let ignoredIslands=0;
+   for(const component of components){if(component===root)mapping[component.id]=0;
+     else if(component.area===1){mapping[component.id]=-2;ignoredIslands++;}
+     else {const id=islands.length+1;mapping[component.id]=id;islands.push({...component,id});}}
+   for(let i=0;i<labels.length;i++)if(labels[i]>=0)labels[i]=mapping[labels[i]];
+   return {labels,islands,ignoredIslands,bridgeStatus,cutPixels:cut.reduce((sum,v)=>sum+v,0),physicalFrame:true};
+ }
  for(let x=0;x<width;x++){seed(x,0);seed((height-1)*width+x,0);}for(let y=0;y<height;y++){seed(y*width,0);seed(y*width+width-1,0);}flood(0);
  let ignoredIslands=0;
  for(let i=0;i<cut.length;i++)if(!cut[i]&&labels[i]===-1){tail=0;const id=islands.length+1;seed(i,id);const island=flood(id);if(island.area===1){labels[i]=-2;ignoredIslands++;}else islands.push(island);}

@@ -108,8 +108,20 @@
 <label class="check"><input id="stencil-show" type="checkbox"> Show active stencil</label>
 <details class="tool-details"><summary>Finished size</summary>
 <label for="stencil-size">Artwork long edge (inches)</label><input id="stencil-size" type="number" min="1" max="100" step="0.5" value="15">
-<p class="muted">24 × 12 in Mylar · 29 × 59 cm working area, oriented to the artwork. Keep the full sheet for shielding. No outer border is cut.</p>
+<label for="sheet-layout-mode">Mylar pieces per intensity</label><select id="sheet-layout-mode"><option value="single">One sheet</option><option value="pair">Two overlapping sheets</option></select>
+<div id="sheet-pair-controls" hidden>
+<p class="muted">Align and tape A + B together before spraying. Shared openings are cut on both pieces. Each intensity uses its own pair.</p>
+<label for="sheet-layout-axis">Join direction</label><select id="sheet-layout-axis"><option value="x">Vertical join · side by side</option><option value="y">Horizontal join · top and bottom</option></select>
+<label for="sheet-layout-orientation">Each sheet's working area</label><select id="sheet-layout-orientation"><option value="portrait">Portrait · 290 × 590 mm</option><option value="landscape">Landscape · 590 × 290 mm</option></select>
+<label for="sheet-overlap">Working-area overlap (mm)</label><input id="sheet-overlap" type="number" min="1" max="100" step="1" value="10">
+<label for="sheet-join">Join position <output id="sheet-join-position">50%</output></label><input id="sheet-join" type="range" min="0" max="100" step="any" value="50">
+<label class="check"><input id="sheet-trim-join" type="checkbox"> Manually trim the joining stock edges</label>
+<p class="muted">Full stock has uncut borders beyond the working area. Keep them unless they cover neighboring openings. Trimming requires centering and marking the working area on each sheet, then trimming only the two edges facing the join before taping. The SVG does not cut these edges.</p>
+<button id="sheet-suggest-join">Suggest join through unbleached areas</button><p id="sheet-join-status" class="muted" role="status"></p>
+</div>
+<p class="muted">24 × 12 in Mylar · 29 × 59 cm working area per sheet. Keep all non-joining stock edges for shielding. No outer border or join line is cut by the SVG.</p>
 <p id="stencil-dimensions" class="muted"></p></details>
+<div id="sheet-piece-controls" hidden><label for="sheet-active-piece">Active physical piece</label><select id="sheet-active-piece"><option value="0">Piece A</option><option value="1">Piece B</option></select><button id="sheet-fit-layout">Fit both pieces</button><p id="sheet-assembly" class="muted"></p></div>
 <label class="check"><input id="stencil-islands" type="checkbox" checked> Highlight disconnected islands</label>
 <p id="stencil-status" class="muted" role="status"></p>
 <div class="assign-secondary"><button id="island-next" disabled>Next island</button><button id="island-assign" disabled>Assign island to active intensity</button></div>
@@ -153,14 +165,14 @@
 <p id="export-status" role="status" aria-live="polite"></p>
 <div id="export-stage"><svg id="export-art" xmlns="http://www.w3.org/2000/svg" aria-label="Exported sheet geometry"></svg></div>
 <p id="export-size"></p><ul id="export-warnings"></ul>
-<p id="export-placement" class="muted"></p><p class="muted">Pale areas stay as Mylar; dark openings are removed. The SVG cuts only openings, with no outer border. Keep your full 24 × 12 in Mylar for shielding; the preview shows the 29 × 59 cm working area. If Design Space crops empty SVG space, verify the cut outline size and placement above on the mat preview. Keep the compound shape together. Import alignment still needs verification.</p>
+<p id="export-placement" class="muted"></p><p class="muted">Pale areas stay as Mylar; dark openings are removed. The SVG cuts only openings, with no outer border. The preview shows the 29 × 59 cm working area on 24 × 12 in stock. Keep the stock for shielding unless manual trimming of joining edges was explicitly selected; retain all other edges. If Design Space crops empty SVG space, verify the cut outline size and placement above on the mat preview. Keep the compound shape together. Import alignment still needs verification.</p>
 <p class="muted">Small-detail checks are limited; narrow necks and material strength still need inspection. Make a small test cut before cutting the full stencil.</p>
 <a id="export-download" aria-disabled="true" tabindex="-1">Download SVG</a>
 </dialog>
 <dialog id="stencil-preview" aria-labelledby="preview-title">
 <div class="preview-heading"><h2 id="preview-title">Stencil preview</h2><button id="preview-close" aria-label="Close preview">Back to editor</button></div>
 <div class="preview-toolbar"><div class="preview-modes"><button id="preview-sheet-mode" aria-pressed="true">Mylar sheets</button><button id="preview-bleach-mode" aria-pressed="false">Bleached result</button></div>
-<div id="preview-sheet-controls"><button id="preview-prev" aria-label="Previous sheet">←</button><select id="preview-layer" aria-label="Preview sheet"></select><button id="preview-next" aria-label="Next sheet">→</button></div>
+<div id="preview-sheet-controls"><button id="preview-prev" aria-label="Previous sheet">←</button><select id="preview-layer" aria-label="Preview sheet"></select><button id="preview-next" aria-label="Next sheet">→</button><select id="preview-piece" aria-label="Preview physical piece" hidden><option value="0">Piece A</option><option value="1">Piece B</option></select></div>
 <div class="preview-zoom"><button id="preview-out" aria-label="Zoom preview out">−</button><output id="preview-zoom-value">100%</output><button id="preview-in" aria-label="Zoom preview in">+</button><button id="preview-fit">Fit</button></div></div>
 <div id="preview-passes" aria-label="Visible bleach passes" hidden></div>
 <p id="preview-status" class="muted" role="status"></p>

@@ -89,6 +89,7 @@ export function createStudioServer({directory,staticDirectory=path.join(appDirec
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   const port=Number(process.env.PORT||8765);
   if(!Number.isInteger(port)||port<1||port>65535)throw Error('PORT must be between 1 and 65535.');
-  const server=createStudioServer();server.on('error',error=>{console.error(error.code==='EADDRINUSE'?`Port ${port} is already in use. Stop the old preview server or choose PORT=8767.`:error.message);process.exitCode=1;});
-  server.listen(port,'127.0.0.1',()=>console.log(`Stencil Studio: http://127.0.0.1:${port}\nProjects: ${path.join(appDirectory,'projects')}`));
+  const directory=process.env.STENCIL_PROJECTS_DIR?path.resolve(process.env.STENCIL_PROJECTS_DIR):path.join(appDirectory,'projects');
+  const server=createStudioServer({directory});server.on('error',error=>{console.error(error.code==='EADDRINUSE'?`Port ${port} is already in use. Stop the old preview server or choose PORT=8767.`:error.message);process.exitCode=1;});
+  server.listen(port,'127.0.0.1',()=>console.log(`Stencil Studio: http://127.0.0.1:${port}\nProjects: ${directory}`));
 }

@@ -8,7 +8,7 @@ import {setupStencil} from './stencil-ui.mjs';
 import {collectBrushRegions} from './group-brush.mjs';
 export function setupAssign(onChange) {
   const $=id=>document.getElementById(id), original=$('assign-original'),overlay=$('assign-overlay'),outline=$('assign-outline'),boundaries=$('assign-boundaries'),quantized=$('assign-quantized'),hints=$('assign-hints'),viewport=$('canvas-viewport'),cursor=$('brush-cursor');
-  let prepareHistory=null;
+  let prepareHistory=null,assigned=0;
   let snapshot=null,model=createPixelAssignments(),selected=-1,selectedTreatment=null,individual=false,brushTarget=1,stroke=null,displayEdges=null,lasso=null,mask=null,maskCount=0,available=new Uint8Array();
   const brushMode=()=>viewport.dataset.tool==='brush';
   const lassoMode=()=>viewport.dataset.tool==='lasso';
@@ -59,7 +59,6 @@ export function setupAssign(onChange) {
     $('assign-selection').textContent=mask?`Lasso · ${maskCount.toLocaleString()} pixels`:lasso?'Drawing lasso…':grouped()?`${treatment} · all matching pixels`:r?`${individual?'Individual region · ':''}Area ${selected+1} · ${r.area.toLocaleString()} pixels`:!snapshot?.result?'Computing regions…':palette().length?'No area selected':'Assignment requires Quantized mode.';
     document.querySelectorAll('[data-bucket]').forEach(button=>{button.disabled=!palette().length||(brushMode()? !snapshot?.result:mask? !maskCount:lassoMode()? true:!editable);button.setAttribute('aria-pressed',String((brushMode()?brushTarget:!mask?value:null)===Number(button.dataset.bucket)));});
     historyControls();
-    let assigned=0;if(snapshot?.result)for(let i=0;i<snapshot.result.labels.length;i++)if(snapshot.source.data[i*4+3]&&model.at(i)!==UNASSIGNED)assigned++;
     $('assign-restore').textContent=grouped()?'Clear group assignment':'Clear assignment';
     $('assign-restore').disabled=mask?!maskCount:lassoMode()||!editable;
     $('unbleach-group').textContent=individual?'Make region unbleached':'Make group unbleached';
@@ -148,8 +147,13 @@ export function setupAssign(onChange) {
     }
   }
   function changed(){
-    stencil.invalidate();smoothing.invalidate();cleanup.clear();displayEdges=null;available=new Uint8Array(model.values.length);
-    if(snapshot?.result)for(let i=0;i<snapshot.result.labels.length;i++)if(model.at(i)===UNASSIGNED&&snapshot.source.data[i*4+3]&&snapshot.result.labels[i]>=0)available[snapshot.result.labels[i]]=1;
+    stencil.invalidate();smoothing.invalidate();cleanup.clear('',{repaintNow:false});displayEdges=null;available=new Uint8Array(model.values.length);assigned=0;
+    // Cache both summaries once per assignment edit, not on every pick/tool event.
+    if(snapshot?.result)for(let i=0;i<snapshot.result.labels.length;i++){
+      if(!snapshot.source.data[i*4+3])continue;
+      if(model.at(i)!==UNASSIGNED)assigned++;
+      else if(snapshot.result.labels[i]>=0)available[snapshot.result.labels[i]]=1;
+    }
     paintOverlay();paintHints();paintBoundaries();paintSelection();controls();onChange(model.edited);
   }
   function assignSelected(to){
