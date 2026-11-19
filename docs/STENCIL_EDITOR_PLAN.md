@@ -2,6 +2,13 @@
 
 Updated: 2026-10-20. This is the current direction; older README sections describe incremental experiments and may be historical.
 
+## Minimum retained connection width — implemented
+
+- Island/bridge analysis now requires a 3-source-pixel retained connection. Label four-connected cores that contain a full retained 3 × 3 neighborhood, then grow their labels over the original retained pixels without merging. Thus 1–2 pixel necks between substantial areas produce separate islands; straight 3-pixel necks remain connected. The square footprint is conservative around diagonal necks/corners. This is analysis only: assignments, cut paths, smoothing, physical scale and saved bridges are unchanged.
+- Completely thin features with no core remain selectable for manual review rather than disappearing; existing single-pixel island exclusion remains. This is a raster strength heuristic, not a complete physical minimum-width certification or a reason to resize artwork.
+- Auto bridge anchors on the solid cores and checks a 3 × 3 retained corridor through each proposed capsule. It can reinforce existing fragile necks, respects existing millimeter width limits, and skips candidates that cannot satisfy the connection rule. Existing manual bridges also participate in the same island analysis.
+- Focused connection-width, stencil, auto-bridge and two-piece layout checks pass (25 tests). Covers horizontal/vertical 1–4 pixel necks, both frame modes, reinforcing narrow necks without repeated suggestions, manual bridge width, unchanged masks and preservation of thin features. No full suite or physical cut verification performed.
+
 ## Two-piece Mylar layout — implemented
 
 - Oversized artwork can use two Mylar pieces per intensity, with suggested joins that favor Unbleached areas. The editor runs on the standard port 8765 and uses the existing local project library.

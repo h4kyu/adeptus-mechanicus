@@ -7,21 +7,21 @@ const analyze=(cut,w,h,bridges=[])=>analyzeSheet(cut,w,h,bridges,1,2);
 const auto=(cut,w,h,bridges=[],mm=3)=>suggestBridges(cut,w,h,analyze(cut,w,h,bridges),1,2,mm).map((b,i)=>({...b,id:`auto-${i}`,layer:1}));
 const rect=(cut,w,x,y,dx,dy,value=0)=>{for(let j=y;j<y+dy;j++)for(let i=x;i<x+dx;i++)cut[j*w+i]=value;};
 test('single-pixel islands are not highlighted, navigated or bridged; assignments stay untouched',()=>{
- const cut=new Uint8Array(400).fill(1);cut[3*20+3]=0;rect(cut,20,9,9,2,2);const original=cut.slice(),result=analyze(cut,20,20);
+ const cut=new Uint8Array(400).fill(1);cut[3*20+3]=0;rect(cut,20,9,9,3,3);const original=cut.slice(),result=analyze(cut,20,20);
  assert.equal(result.ignoredIslands,1);assert.equal(result.islands.length,1);assert.equal(result.islands[0].id,1);assert.equal(result.labels[63],-2);
  const bridges=auto(cut,20,20);assert.equal(bridges.length,1);assert.equal(analyze(cut,20,20,bridges).islands.length,0);assert.deepEqual(cut,original);
 });
 test('ring gets one short editable bridge with no duplicate on a second run',()=>{
  const cut=rasterizeCutPath('M2 2L38 2L38 38L2 38ZM15 15L25 15L25 25L15 25Z',40,40),bridges=auto(cut,40,40);
- assert.equal(bridges.length,1);assert.equal(bridges[0].widthMm,3);assert.ok(Math.hypot(bridges[0].a.x-bridges[0].b.x,bridges[0].a.y-bridges[0].b.y)<=14);
+ assert.equal(bridges.length,1);assert.equal(bridges[0].widthMm,3);assert.ok(Math.hypot(bridges[0].a.x-bridges[0].b.x,bridges[0].a.y-bridges[0].b.y)<=16);
  const result=analyze(cut,40,40,bridges);assert.equal(result.islands.length,0);assert.equal(result.bridgeStatus[0].reason,'');assert.equal(auto(cut,40,40,bridges).length,0);
  const plan={...newStencilPlan(),bridges};validateStencilPlan(plan,40,40,2);const history=createBridgeHistory();history.commit([],bridges);assert.deepEqual(history.undo(bridges),[]);assert.deepEqual(history.redo([]),bridges);
 });
 test('island thickness caps width and nearby islands share a short network to the frame',()=>{
- const cut=new Uint8Array(60*30).fill(1);rect(cut,60,0,0,60,2);rect(cut,60,20,7,2,6);rect(cut,60,20,17,2,6);
- const bridges=auto(cut,60,30,[],5);assert.equal(bridges.length,2);assert.ok(bridges.every(b=>b.widthMm<=2));assert.equal(analyze(cut,60,30,bridges).islands.length,0);
+ const cut=new Uint8Array(60*30).fill(1);rect(cut,60,0,0,60,2);rect(cut,60,20,7,3,6);rect(cut,60,20,17,3,6);
+ const bridges=auto(cut,60,30,[],5);assert.equal(bridges.length,2);assert.ok(bridges.every(b=>b.widthMm<=3));assert.equal(analyze(cut,60,30,bridges).islands.length,0);
  // The two-island network is shorter than giving each island its own frame bridge.
- assert.ok(bridges.reduce((sum,b)=>sum+Math.hypot(b.a.x-b.b.x,b.a.y-b.b.y),0)<15);
+ assert.ok(bridges.reduce((sum,b)=>sum+Math.hypot(b.a.x-b.b.x,b.a.y-b.b.y),0)<20);
 });
 test('preserves existing bridges and handles frame-only anchoring',()=>{
  const cut=new Uint8Array(30*30).fill(1);rect(cut,30,10,10,5,5);

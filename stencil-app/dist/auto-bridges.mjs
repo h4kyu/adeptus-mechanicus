@@ -9,7 +9,7 @@ export function suggestBridges(baseCut,width,height,analysis,pxPerMm,margin,widt
  let head=0,tail=0;
  const seed=(i,id,source)=>{if(owner[i]<0){owner[i]=id;origin[i]=source;queue[tail++]=i;}};
  // Anchor on original retained material, even when existing bridges have joined it.
- for(let i=0;i<n;i++)if(labels[i]>=0&&!baseCut[i])seed(i,labels[i],i);
+ for(let i=0;i<n;i++)if(labels[i]>=0&&!baseCut[i]&&(!analysis.core||analysis.core[i]))seed(i,labels[i],i);
  // Virtual frame sources support art whose openings run all the way to an edge.
  if(!analysis.physicalFrame){
    for(let x=0;x<width;x++){seed(x,0,-1-x);seed((height-1)*width+x,0,-1-width-x);}
@@ -41,10 +41,15 @@ export function suggestBridges(baseCut,width,height,analysis,pxPerMm,margin,widt
    return Math.min(cap,span);
  }
  // A thin diagonal capsule can miss a corner pixel at native resolution. Require
-// a four-connected staircase inside the capsule, matching the island checker.
+// a four-connected staircase of 3×3 retained neighborhoods, matching the checker.
  function connects(a,b,radius){
    let x=Math.floor(a.x),y=Math.floor(a.y),tx=Math.floor(b.x),ty=Math.floor(b.y);
-   const fits=(cx,cy)=>pointSegmentDistance({x:cx+.5,y:cy+.5},a,b)<=radius+1e-8;
+   const fits=(cx,cy)=>{
+     for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+       const xx=cx+dx,yy=cy+dy;
+       if(xx>=0&&yy>=0&&xx<width&&yy<height&&baseCut[yy*width+xx]&&pointSegmentDistance({x:xx+.5,y:yy+.5},a,b)>radius+1e-8)return false;
+     }return true;
+   };
    while(x!==tx||y!==ty){const sx=Math.sign(tx-x),sy=Math.sign(ty-y),canX=sx&&fits(x+sx,y),canY=sy&&fits(x,y+sy);if(!canX&&!canY)return false;
      if(canX&&(!canY||pointSegmentDistance({x:x+sx+.5,y:y+.5},a,b)<pointSegmentDistance({x:x+.5,y:y+sy+.5},a,b)))x+=sx;else y+=sy;
    }return true;

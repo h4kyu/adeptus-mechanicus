@@ -37,25 +37,45 @@ export function analyzeSheet(baseCut,width,height,bridges,pxPerMm,margin,{physic
    const reason=!inside?'Outside sheet':!retained(bridge.a)||!retained(bridge.b)?'Extend both ends onto retained material':!crossed?'No opening crossed':bridge.needsReview?'Review after artwork or size change':'';
    bridgeStatus.push({id:bridge.id,reason,crossed});
  }
- // Every retained pixel touching the image edge connects to the surrounding frame.
- const labels=new Int32Array(cut.length).fill(-1),queue=new Int32Array(cut.length),islands=[];let tail=0;
- function seed(i,id){if(!cut[i]&&labels[i]===-1){labels[i]=id;queue[tail++]=i;}}
- function flood(id){let head=0,area=0,minX=width,minY=height,maxX=0,maxY=0;while(head<tail){const i=queue[head++],x=i%width,y=Math.floor(i/width);area++;minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);if(x)seed(i-1,id);if(x+1<width)seed(i+1,id);if(y)seed(i-width,id);if(y+1<height)seed(i+width,id);}return {id,area,bounds:[minX,minY,maxX,maxY]};}
- if(physicalFrame){
-   // A tile edge can pass through an opening. Its opposite edges must not be
-   // treated as an imaginary surrounding frame connecting separate pieces.
-   const components=[];
-   for(let i=0;i<cut.length;i++)if(!cut[i]&&labels[i]===-1){tail=0;const id=components.length+1;seed(i,id);components.push(flood(id));}
-   let root=null;for(const component of components)if(!root||component.area>root.area)root=component;
-   const mapping=new Int32Array(components.length+1).fill(-1);let ignoredIslands=0;
-   for(const component of components){if(component===root)mapping[component.id]=0;
-     else if(component.area===1){mapping[component.id]=-2;ignoredIslands++;}
-     else {const id=islands.length+1;mapping[component.id]=id;islands.push({...component,id});}}
-   for(let i=0;i<labels.length;i++)if(labels[i]>=0)labels[i]=mapping[labels[i]];
-   return {labels,islands,ignoredIslands,bridgeStatus,cutPixels:cut.reduce((sum,v)=>sum+v,0),physicalFrame:true};
+ // Label 3×3 retained cores first: a one- or two-pixel neck cannot join
+ // them. Grow those labels back over the original material without merging,
+ // preserving outlines and thin features for selection rather than eroding art.
+ const core=new Uint8Array(cut.length);
+ for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+   const i=y*width+x;if(cut[i])continue;let solid=true;
+   for(let dy=-1;dy<=1&&solid;dy++)for(let dx=-1;dx<=1;dx++){
+     const xx=x+dx,yy=y+dy;
+     if(xx>=0&&yy>=0&&xx<width&&yy<height&&cut[yy*width+xx]){solid=false;break;}
+   }
+   core[i]=+solid;
  }
- for(let x=0;x<width;x++){seed(x,0);seed((height-1)*width+x,0);}for(let y=0;y<height;y++){seed(y*width,0);seed(y*width+width-1,0);}flood(0);
- let ignoredIslands=0;
- for(let i=0;i<cut.length;i++)if(!cut[i]&&labels[i]===-1){tail=0;const id=islands.length+1;seed(i,id);const island=flood(id);if(island.area===1){labels[i]=-2;ignoredIslands++;}else islands.push(island);}
- return {labels,islands,ignoredIslands,bridgeStatus,cutPixels:cut.reduce((sum,v)=>sum+v,0)};
+ const labels=new Int32Array(cut.length).fill(-1),queue=new Int32Array(cut.length);let head=0,tail=0;
+ function seed(i,id,coresOnly=false){if(!cut[i]&&labels[i]===-1&&(!coresOnly||core[i])){labels[i]=id;queue[tail++]=i;}}
+ function grow(coresOnly=false){while(head<tail){const i=queue[head++],x=i%width,y=Math.floor(i/width),id=labels[i];if(x)seed(i-1,id,coresOnly);if(x+1<width)seed(i+1,id,coresOnly);if(y)seed(i-width,id,coresOnly);if(y+1<height)seed(i+width,id,coresOnly);}}
+ // In artwork-only analysis the surrounding stock is one root. Physical-piece
+ // analysis instead chooses the largest component, without a virtual edge join.
+ if(!physicalFrame){
+   for(let x=0;x<width;x++){seed(x,0,true);seed((height-1)*width+x,0,true);}
+   for(let y=0;y<height;y++){seed(y*width,0,true);seed(y*width+width-1,0,true);}grow(true);
+ }
+ let count=0;
+ for(let i=0;i<cut.length;i++)if(core[i]&&labels[i]===-1){seed(i,++count,true);grow(true);}
+ // Reuse the queue for simultaneous growth, so a narrow neck is shared between
+ // its neighboring labels rather than swallowed by the first component.
+ head=0;tail=0;for(let i=0;i<labels.length;i++)if(labels[i]>=0)queue[tail++]=i;
+ if(!physicalFrame){
+   for(let x=0;x<width;x++){seed(x,0);seed((height-1)*width+x,0);}
+   for(let y=0;y<height;y++){seed(y*width,0);seed(y*width+width-1,0);}
+ }
+ grow();
+ // Completely thin disconnected features have no core. Keep them visible and
+ // eligible for manual review; only the existing single-pixel exclusion applies.
+ for(let i=0;i<cut.length;i++)if(!cut[i]&&labels[i]===-1){seed(i,++count);grow();}
+ const components=Array.from({length:count+1},(_,id)=>({id,area:0,bounds:[width,height,0,0]}));
+ for(let i=0;i<labels.length;i++)if(labels[i]>=0){const c=components[labels[i]],x=i%width,y=Math.floor(i/width);c.area++;c.bounds[0]=Math.min(c.bounds[0],x);c.bounds[1]=Math.min(c.bounds[1],y);c.bounds[2]=Math.max(c.bounds[2],x);c.bounds[3]=Math.max(c.bounds[3],y);}
+ let root=components[0];if(physicalFrame)for(const c of components)if(c.area>root.area)root=c;
+ const islands=[],mapping=new Int32Array(count+1);let ignoredIslands=0;
+ for(const c of components){if(c===root||!c.area)continue;if(c.area===1){mapping[c.id]=-2;ignoredIslands++;}else{mapping[c.id]=islands.length+1;islands.push({...c,id:mapping[c.id]});}}
+ for(let i=0;i<labels.length;i++)if(labels[i]>=0)labels[i]=mapping[labels[i]];
+ return {labels,islands,ignoredIslands,bridgeStatus,cutPixels:cut.reduce((sum,v)=>sum+v,0),physicalFrame,minConnectionPx:3,core};
 }

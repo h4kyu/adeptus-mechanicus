@@ -4,7 +4,7 @@ import {rasterizeCutPath,analyzeSheet,sheetScale} from '../dist/stencil-geometry
 import {newStencilPlan,validateStencilPlan,createBridgeHistory} from '../dist/stencil-plan.mjs';
 import {encodeProject,decodeProject} from '../dist/projects.mjs';
 const ring='M2 2L18 2L18 18L2 18ZM7 7L13 7L13 13L7 13Z';
-const bridge=(extra={})=>({id:'bridge',layer:1,a:{x:10,y:10},b:{x:10,y:0},widthMm:2,enabled:true,needsReview:false,...extra});
+const bridge=(extra={})=>({id:'bridge',layer:1,a:{x:10,y:10},b:{x:10,y:0},widthMm:3,enabled:true,needsReview:false,...extra});
 test('a separate sheet identifies retained islands, then a bridge connects them to the frame',()=>{
  const cut=rasterizeCutPath(ring,20,20),before=cut.slice();
  assert.equal(analyzeSheet(cut,20,20,[],1,2).islands.length,1);
